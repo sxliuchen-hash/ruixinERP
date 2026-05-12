@@ -23,7 +23,6 @@
 
 const wechatApiService = require('./wechatApiService');
 const wechatConfig = require('../../config/wechat');
-const { sequelize } = require('../../config/database');
 const {
   Contract,
   Payment,
@@ -178,18 +177,30 @@ class WechatSyncService {
     const summary = fields['付款事由'] || '';
     const paymentMethodName = fields['付款方式'] || '';
 
-    // 匹配账户（按付款方式名称模糊匹配）
+    // 匹配账户（优先按 remark 精确匹配简称，再按名称模糊匹配）
     let account_id = null;
     if (paymentMethodName) {
-      const account = await BankAccount.findOne({
-        where: sequelize.where(
-          sequelize.fn('LOCATE', paymentMethodName.slice(0, 10), sequelize.col('name')),
-          { [require('sequelize').Op.gt]: 0 }
-        )
+      // 1. 优先按 remark 精确匹配（remark 里存企微审批的简称）
+      const byRemark = await BankAccount.findOne({
+        where: { remark: paymentMethodName, status: 1 }
       });
-      if (account) account_id = account.id;
+      if (byRemark) {
+        account_id = byRemark.id;
+      } else {
+        // 2. 按名称模糊匹配（取简称前几个字）
+        const keyword = paymentMethodName.replace(/[-—].*$/, '').slice(0, 6);
+        if (keyword.length >= 2) {
+          const byName = await BankAccount.findOne({
+            where: {
+              name: { [require('sequelize').Op.like]: `%${keyword}%` },
+              status: 1
+            }
+          });
+          if (byName) account_id = byName.id;
+        }
+      }
     }
-    // 兜底：取第一个启用的账户
+    // 3. 兜底：取第一个启用的账户
     if (!account_id) {
       const defaultAccount = await BankAccount.findOne({ where: { status: 1 } });
       if (defaultAccount) account_id = defaultAccount.id;
