@@ -96,8 +96,10 @@ async function receiveCallback(req, res, next) {
       messagePreview: message.slice(0, 500)
     });
 
-    // T10 会把事件分发到 wechatSyncService，这里先占位
-    // const handlerResult = await require('../services/wechat/wechatSyncService').handleCallback(message);
+    // T10 审批同步：解密后分发到 wechatSyncService
+    const wechatSyncService = require('../services/wechat/wechatSyncService');
+    const syncResult = await wechatSyncService.handleCallback(message);
+    logger.info('[Wechat Callback] 同步结果', syncResult);
 
     res.type('text/plain').send('success');
   } catch (error) {
@@ -171,10 +173,30 @@ async function getWechatUser(req, res, next) {
   }
 }
 
+/**
+ * POST /api/v1/wechat/sync - 手动触发批量同步（admin）
+ * Body: { hours: 24 }  回溯小时数，默认 2
+ */
+async function manualSync(req, res, next) {
+  try {
+    const hours = parseInt(req.body?.hours) || 2;
+    const wechatSyncService = require('../services/wechat/wechatSyncService');
+    const result = await wechatSyncService.batchSync(hours);
+    res.json({
+      success: true,
+      message: `同步完成：新增 ${result.synced}，跳过 ${result.skipped}，失败 ${result.failed}`,
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   verifyCallback,
   receiveCallback,
   getConfigStatus,
   testToken,
-  getWechatUser
+  getWechatUser,
+  manualSync
 };

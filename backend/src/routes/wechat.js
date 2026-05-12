@@ -43,5 +43,6 @@ router.use(requireAdmin());
 router.get('/config', wechatController.getConfigStatus);
 router.get('/test-token', wechatController.testToken);
 router.get('/users/:userId', wechatController.getWechatUser);
+router.post('/sync', wechatController.manualSync);
 
 module.exports = router;

@@ -12,9 +12,12 @@ const initJobs = () => {
   logger.info('定时任务初始化...');
 
   // TODO: Phase 2 - 企业微信审批同步（每小时）
-  // cron.schedule('0 * * * *', () => {
-  //   require('./wechatSyncJob').run();
-  // });
+  cron.schedule('0 * * * *', () => {
+    require('./wechatSyncJob').run().catch(e => {
+      logger.error('wechatSyncJob 执行失败:', e);
+    });
+  });
+  logger.info('已注册：企微审批同步（每小时整点）');
 
   // Phase 3 T15 - 专利年费到期提醒（每日 09:00）
   cron.schedule('0 9 * * *', () => {
