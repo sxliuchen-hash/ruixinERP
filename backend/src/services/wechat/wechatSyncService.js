@@ -120,16 +120,24 @@ class WechatSyncService {
     const amount = parseFloat(fields['合计金额']) || 0;
     const paidAmount = parseFloat(fields['已收款金额']) || 0;
 
-    // 匹配客户/供应商
+    // 匹配客户/供应商（匹配不到则自动创建）
     let customer_id = null;
     let supplier_id = null;
     if (counterpartyName) {
       if (contractType === 'sale') {
-        const customer = await Customer.findOne({ where: { name: counterpartyName } });
-        if (customer) customer_id = customer.id;
+        let customer = await Customer.findOne({ where: { name: counterpartyName } });
+        if (!customer) {
+          customer = await Customer.create({ name: counterpartyName });
+          logger.info(`[WechatSync] 自动创建客户: ${counterpartyName}`);
+        }
+        customer_id = customer.id;
       } else {
-        const supplier = await Supplier.findOne({ where: { name: counterpartyName } });
-        if (supplier) supplier_id = supplier.id;
+        let supplier = await Supplier.findOne({ where: { name: counterpartyName } });
+        if (!supplier) {
+          supplier = await Supplier.create({ name: counterpartyName });
+          logger.info(`[WechatSync] 自动创建供应商: ${counterpartyName}`);
+        }
+        supplier_id = supplier.id;
       }
     }
 
