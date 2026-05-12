@@ -1,0 +1,107 @@
+/**
+ * 专利库存管理接口封装
+ *
+ * 后端前缀：/api/v1/inventory
+ * 权限：authenticate + requireErpAccess + attachDataFilter
+ *       （agent 仅能看/改自己 created_by 的记录）
+ */
+import request from './request'
+
+// ============ 库存主资源 ============
+
+/**
+ * 库存列表
+ * 支持筛选：status, tech_field, supplier_id, project_id,
+ *           min_age, max_age, sort (age|profit|price|deadline), order,
+ *           keyword（专利号/名称/备注）
+ */
+export function getInventoryList(params) {
+  return request.get('/inventory', { params })
+}
+
+/** 详情（含 annualFees + priceHistory） */
+export function getInventoryDetail(id) {
+  return request.get(`/inventory/${id}`)
+}
+
+/** 入库 */
+export function createInventory(data) {
+  return request.post('/inventory', data)
+}
+
+/** 编辑（不接受 current_price / total_maintain_cost） */
+export function updateInventory(id, data) {
+  return request.put(`/inventory/${id}`, data)
+}
+
+/** 删除（级联删除年费和调价历史） */
+export function deleteInventory(id) {
+  return request.delete(`/inventory/${id}`)
+}
+
+/**
+ * 变更状态（in_stock / sold / abandoned / transferring）
+ * @param {number} id
+ * @param {{status, stock_out_date?}} data
+ */
+export function changeInventoryStatus(id, data) {
+  return request.put(`/inventory/${id}/status`, data)
+}
+
+// ============ 调价 ============
+
+/**
+ * 单个调价
+ * @param {number} id
+ * @param {{new_price, change_date?, reason?}} data
+ */
+export function changeInventoryPrice(id, data) {
+  return request.put(`/inventory/${id}/price`, data)
+}
+
+/**
+ * 批量调价
+ * @param {Object} data
+ * @param {'fixed'|'percent'} data.mode
+ * @param {number} [data.new_price]  mode=fixed 必填
+ * @param {number} [data.percent]    mode=percent 必填（如 10 表 +10%）
+ * @param {number[]} [data.ids]
+ * @param {string} [data.tech_field]
+ * @param {string} [data.status]
+ * @param {string} [data.reason]
+ * @param {string} [data.change_date]
+ */
+export function batchChangePrice(data) {
+  return request.put('/inventory/batch-price', data)
+}
+
+// ============ 年费子资源 ============
+
+/**
+ * 添加年费记录
+ * @param {number} id 库存 ID
+ * @param {{fee_type?, amount, fee_date, deadline_date?, payment_id?, remark?}} data
+ */
+export function addAnnualFee(id, data) {
+  return request.post(`/inventory/${id}/fees`, data)
+}
+
+/** 删除年费记录 */
+export function deleteAnnualFee(id, feeId) {
+  return request.delete(`/inventory/${id}/fees/${feeId}`)
+}
+
+// ============ 聚合接口 ============
+
+/** 库存总览统计 */
+export function getInventoryOverview() {
+  return request.get('/inventory/overview')
+}
+
+/**
+ * 即将到期列表
+ * @param {{days?: number}} params 默认 60 天
+ */
+export function getExpiringInventory(params) {
+  return request.get('/inventory/expiring', { params })
+}
