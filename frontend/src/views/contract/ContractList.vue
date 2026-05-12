@@ -56,7 +56,7 @@
       <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
       <el-table-column label="客户/供应商" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">
-          {{ row.customer_name || row.supplier_name || '-' }}
+          {{ row.customer?.name || row.supplier?.name || '-' }}
         </template>
       </el-table-column>
       <el-table-column label="金额" width="130" align="right">
