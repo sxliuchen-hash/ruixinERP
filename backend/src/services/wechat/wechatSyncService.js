@@ -44,6 +44,12 @@ class WechatSyncService {
    * @param {string} xmlMessage 解密后的 XML 消息体
    */
   async handleCallback(xmlMessage) {
+    // 检查是否为成员变更事件
+    const changeType = this._extractXmlField(xmlMessage, 'ChangeType');
+    if (changeType === 'create_user') {
+      return await this._handleNewMember(xmlMessage);
+    }
+
     // 解析 XML 中的审批相关字段
     const spNo = this._extractXmlField(xmlMessage, 'SpNo');
     const spStatus = this._extractXmlField(xmlMessage, 'SpStatus');
@@ -324,6 +330,44 @@ class WechatSyncService {
   }
 
   // ==================== 私有工具方法 ====================
+
+  /**
+   * 处理企微新成员加入事件 → 自动创建员工档案
+   */
+  async _handleNewMember(xmlMessage) {
+    const Employee = require('../../models/Employee');
+    const userid = this._extractXmlField(xmlMessage, 'UserID');
+    const name = this._extractXmlField(xmlMessage, 'Name');
+    const department = this._extractXmlField(xmlMessage, 'Department');
+
+    if (!userid) {
+      return { handled: false, reason: 'no_userid' };
+    }
+
+    // 检查是否已存在
+    const existing = await Employee.findOne({ where: { wechat_userid: userid } });
+    if (existing) {
+      logger.info(`[WechatSync] 员工 ${userid} 已存在，跳过`);
+      return { handled: false, reason: 'duplicate' };
+    }
+
+    // 创建员工档案
+    const employee = await Employee.create({
+      name: name || userid,
+      wechat_userid: userid,
+      role: 'sales', // 默认为销售，admin 后续手动调整
+      status: 'probation',
+      hire_date: new Date().toISOString().slice(0, 10),
+      region: '西安',
+      base_salary: 2400,
+      position_allowance: 1000,
+      attendance_bonus: 100,
+      remark: `企微自动创建 | 部门: ${department || '-'}`
+    });
+
+    logger.info(`[WechatSync] 新员工档案已创建: ${name}(${userid}), id=${employee.id}`);
+    return { handled: true, action: 'employee_created', id: employee.id, name };
+  }
 
   /**
    * 解析 apply_data.contents 为 { 字段名: 值 } 的扁平对象
