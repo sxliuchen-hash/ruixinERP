@@ -144,9 +144,12 @@ class WechatSyncService {
     // 查找申请人对应的 user_id
     const createdBy = await this._resolveUserId(info.applyer?.userid);
 
+    // 生成合同编号：CZ-类型+年月日+5位流水号
+    const contractNo = await this._generateContractNo(contractType, signDate);
+
     // 创建合同
     const contract = await Contract.create({
-      contract_no: `WX-${spNo}`,
+      contract_no: contractNo,
       type: contractType,
       title: `${counterpartyName || '企微审批'} - ${fields['合同类型'] || '合同'}`,
       customer_id,
@@ -353,6 +356,31 @@ class WechatSyncService {
       default:
         return v.text || '';
     }
+  }
+
+  /**
+   * 生成合同编号：CZ-{类型}{年月日}{5位流水号}
+   * 示例：CZ-XS2026051300001 / CZ-CG2026051300001
+   */
+  async _generateContractNo(type, signDate) {
+    const { Op } = require('sequelize');
+    const typeCode = type === 'sale' ? 'XS' : 'CG';
+    const dateStr = (signDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+    const prefix = `CZ-${typeCode}${dateStr}`;
+
+    // 查当天最大流水号
+    const last = await Contract.findOne({
+      where: { contract_no: { [Op.like]: `${prefix}%` } },
+      order: [['contract_no', 'DESC']]
+    });
+
+    let seq = 1;
+    if (last && last.contract_no) {
+      const lastSeq = parseInt(last.contract_no.slice(prefix.length)) || 0;
+      seq = lastSeq + 1;
+    }
+
+    return `${prefix}${String(seq).padStart(5, '0')}`;
   }
 
   /**
