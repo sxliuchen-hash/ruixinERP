@@ -59,10 +59,10 @@ class WechatSyncService {
       return { handled: false };
     }
 
-    // 仅处理审批通过（sp_status=2）
-    if (spStatus !== '2') {
-      logger.info(`[WechatSync] 审批单 ${spNo} 状态=${spStatus}，非通过状态，跳过`);
-      return { handled: false, reason: 'not_approved' };
+    // 处理审批中(1)、通过(2)、驳回(3)、撤销(4)
+    if (!['1', '2', '3', '4'].includes(spStatus)) {
+      logger.debug(`[WechatSync] 审批单 ${spNo} 状态=${spStatus}，跳过`);
+      return { handled: false, reason: 'unknown_status' };
     }
 
     return await this.syncBySpNo(spNo);
@@ -83,10 +83,15 @@ class WechatSyncService {
         return { handled: false, reason: 'no_detail' };
       }
 
-      // 再次确认是已通过状态
-      if (info.sp_status !== 2) {
+      // 处理驳回/撤销：如果 ERP 已有记录，更新为 terminated
+      if (info.sp_status === 3 || info.sp_status === 4) {
+        return await this._handleRejected(spNo, info.sp_status);
+      }
+
+      // 审批中(1)或已通过(2)都同步
+      if (info.sp_status !== 1 && info.sp_status !== 2) {
         logger.info(`[WechatSync] ${spNo} 状态=${info.sp_status}，跳过`);
-        return { handled: false, reason: 'not_approved' };
+        return { handled: false, reason: 'unknown_status' };
       }
 
       // 按模板分发
@@ -112,10 +117,21 @@ class WechatSyncService {
     const spNo = info.sp_no;
     const fields = this._parseApplyData(info.apply_data);
 
-    // 幂等检查
+    // 幂等检查：已存在则更新状态
     const existing = await Contract.findOne({ where: { sp_no: spNo } });
     if (existing) {
-      logger.info(`[WechatSync] 合同 sp_no=${spNo} 已存在(id=${existing.id})，跳过`);
+      // 更新状态（审批通过+流程结束=completed，审批中=active）
+      const fields = this._parseApplyData(info.apply_data);
+      const flowEnd = fields['流程结束'] || '';
+      let newStatus = 'active';
+      if (info.sp_status === 2 && flowEnd.includes('是')) newStatus = 'completed';
+      else if (info.sp_status === 2) newStatus = 'active';
+
+      if (existing.status !== newStatus && existing.status !== 'terminated') {
+        await existing.update({ status: newStatus });
+        logger.info(`[WechatSync] 合同 ${spNo} 状态更新: ${existing.status} → ${newStatus}`);
+        return { action: 'updated', type: 'contract', id: existing.id, status: newStatus };
+      }
       return { action: 'skipped', reason: 'duplicate', id: existing.id };
     }
 
@@ -153,9 +169,12 @@ class WechatSyncService {
     // 生成合同编号：CZ-类型+年月日+5位流水号
     const contractNo = await this._generateContractNo(contractType, signDate);
 
-    // 判断合同状态：如果"流程结束=是"则为 completed
+    // 判断合同状态
     const flowEnd = fields['流程结束'] || '';
-    const contractStatus = flowEnd.includes('是') ? 'completed' : 'active';
+    let contractStatus = 'active'; // 默认进行中
+    if (info.sp_status === 2 && flowEnd.includes('是')) {
+      contractStatus = 'completed';
+    }
 
     // 创建合同
     const contract = await Contract.create({
@@ -327,6 +346,31 @@ class WechatSyncService {
     }
 
     return { synced, skipped, failed };
+  }
+
+  /**
+   * 处理驳回/撤销的审批 → 更新 ERP 记录为 terminated
+   */
+  async _handleRejected(spNo, spStatus) {
+    const statusLabel = spStatus === 3 ? '驳回' : '撤销';
+
+    // 检查合同
+    const contract = await Contract.findOne({ where: { sp_no: spNo } });
+    if (contract && contract.status !== 'terminated') {
+      await contract.update({ status: 'terminated' });
+      logger.info(`[WechatSync] 合同 ${spNo} 已${statusLabel}，状态→terminated`);
+      return { handled: true, action: 'terminated', type: 'contract', id: contract.id };
+    }
+
+    // 检查付款
+    const payment = await Payment.findOne({ where: { sp_no: spNo } });
+    if (payment) {
+      await payment.destroy();
+      logger.info(`[WechatSync] 付款 ${spNo} 已${statusLabel}，已删除`);
+      return { handled: true, action: 'deleted', type: 'payment', id: payment.id };
+    }
+
+    return { handled: false, reason: 'no_record_to_reject' };
   }
 
   // ==================== 私有工具方法 ====================
