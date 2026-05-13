@@ -147,6 +147,10 @@ class WechatSyncService {
     // 生成合同编号：CZ-类型+年月日+5位流水号
     const contractNo = await this._generateContractNo(contractType, signDate);
 
+    // 判断合同状态：如果"流程结束=是"则为 completed
+    const flowEnd = fields['流程结束'] || '';
+    const contractStatus = flowEnd.includes('是') ? 'completed' : 'active';
+
     // 创建合同
     const contract = await Contract.create({
       contract_no: contractNo,
@@ -157,14 +161,42 @@ class WechatSyncService {
       amount,
       paid_amount: paidAmount,
       sign_date: signDate,
-      status: 'active',
+      status: contractStatus,
       sp_no: spNo,
       confirm_status: 'confirmed',
       remark: `企微审批自动同步 | 我方: ${fields['我方签订名称'] || '-'}`,
       created_by: createdBy
     });
 
-    logger.info(`[WechatSync] 合同已创建: id=${contract.id}, sp_no=${spNo}`);
+    // 如果有已收款金额，自动生成一条收款记录（确保账户资金往来可追踪）
+    if (paidAmount > 0 && contractType === 'sale') {
+      try {
+        // 找一个默认账户
+        const defaultAccount = await BankAccount.findOne({ where: { status: 1 } });
+        const paymentNo = await this._generatePaymentNo('income', signDate);
+
+        await Payment.create({
+          payment_no: paymentNo,
+          type: 'income',
+          category: 'business',
+          amount: paidAmount,
+          payment_date: signDate || new Date().toISOString().slice(0, 10),
+          payment_method: 'transfer',
+          account_id: defaultAccount ? defaultAccount.id : null,
+          contract_id: contract.id,
+          customer_id,
+          sp_no: `${spNo}-SK`,
+          confirm_status: 'confirmed',
+          summary: `合同 ${contractNo} 已收款（审批同步）`,
+          created_by: createdBy
+        });
+        logger.info(`[WechatSync] 自动创建收款: 合同${contract.id}, 金额${paidAmount}`);
+      } catch (e) {
+        logger.warn(`[WechatSync] 自动创建收款失败: ${e.message}`);
+      }
+    }
+
+    logger.info(`[WechatSync] 合同已创建: id=${contract.id}, sp_no=${spNo}, status=${contractStatus}`);
     return { action: 'created', type: 'contract', id: contract.id };
   }
 
@@ -230,8 +262,12 @@ class WechatSyncService {
 
     const createdBy = await this._resolveUserId(info.applyer?.userid);
 
+    // 生成付款编号
+    const paymentNo = await this._generatePaymentNo('expense', paymentDate);
+
     // 创建付款记录
     const payment = await Payment.create({
+      payment_no: paymentNo,
       type: 'expense',
       category,
       amount,
@@ -356,6 +392,29 @@ class WechatSyncService {
       default:
         return v.text || '';
     }
+  }
+
+  /**
+   * 生成付款/收款编号：CZ-{FK/SK}{年月日}{5位流水号}
+   */
+  async _generatePaymentNo(type, paymentDate) {
+    const { Op } = require('sequelize');
+    const typeCode = type === 'income' ? 'SK' : 'FK';
+    const dateStr = (paymentDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+    const prefix = `CZ-${typeCode}${dateStr}`;
+
+    const last = await Payment.findOne({
+      where: { payment_no: { [Op.like]: `${prefix}%` } },
+      order: [['payment_no', 'DESC']]
+    });
+
+    let seq = 1;
+    if (last && last.payment_no) {
+      const lastSeq = parseInt(last.payment_no.slice(prefix.length)) || 0;
+      seq = lastSeq + 1;
+    }
+
+    return `${prefix}${String(seq).padStart(5, '0')}`;
   }
 
   /**
