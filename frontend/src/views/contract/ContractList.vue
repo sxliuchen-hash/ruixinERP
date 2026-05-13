@@ -299,7 +299,7 @@ async function fetchList() {
 
     const res = await getContractList(params)
     contractList.value = res.data?.list || res.data || []
-    pagination.total = res.data?.total || contractList.value.length
+    pagination.total = res.data?.pagination?.total || res.data?.total || 0
   } catch (error) {
     console.error('获取合同列表失败:', error)
   } finally {
