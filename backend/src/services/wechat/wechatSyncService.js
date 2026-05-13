@@ -411,7 +411,12 @@ class WechatSyncService {
 
       case 'Date':
         if (v.date && v.date.s_timestamp) {
-          return new Date(parseInt(v.date.s_timestamp) * 1000).toISOString().slice(0, 10);
+          // 企微时间戳是北京时间的 0 点，用本地时间转换避免时区偏移
+          const d = new Date(parseInt(v.date.s_timestamp) * 1000);
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
         }
         return '';
 
