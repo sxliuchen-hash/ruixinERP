@@ -53,6 +53,9 @@ const Notification = require('./Notification');
 // Phase 4: 银行流水（T18）
 const BankStatement = require('./BankStatement');
 
+// Phase 5: 人事薪资（T-HR1）
+const Employee = require('./Employee');
+
 // ==================== 主项目模型（只读） ====================
 const MainUser = require('./MainUser');
 
@@ -185,5 +188,6 @@ module.exports = {
   CostCategory,
   Notification,
   BankStatement,
+  Employee,
   MainUser,
 };

@@ -128,6 +128,13 @@ const routes = [
         component: () => import('@/views/import/ImportPage.vue'),
         meta: { title: '数据导入' }
       },
+      // 员工档案（仅 admin）
+      {
+        path: 'employees',
+        name: 'EmployeeList',
+        component: () => import('@/views/employee/EmployeeList.vue'),
+        meta: { title: '员工档案', role: 'admin' }
+      },
       // 系统设置（仅 admin）
       {
         path: 'system/templates',

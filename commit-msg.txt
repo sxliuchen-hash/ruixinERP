@@ -1,1 +1,1 @@
-fix: 同步时自动创建客户/供应商 + 修复脚本补历史数据
+feat: employee management - model, routes, frontend page

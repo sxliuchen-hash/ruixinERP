@@ -56,6 +56,10 @@ router.use('/export', require('./export'));
 router.use('/import', require('./import'));
 // 操作日志
 router.use('/logs', require('./logs'));
+// 归类规则
+router.use('/classify-rules', require('./classifyRules'));
+// 员工档案
+router.use('/employees', require('./employees'));
 
 // TODO: Phase 2 剩余
 // router.use('/wechat', require('./wechat'));
