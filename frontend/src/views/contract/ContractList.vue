@@ -46,6 +46,12 @@
     <!-- 合同列表表格 -->
     <el-table :data="contractList" v-loading="loading" border stripe>
       <el-table-column prop="contract_no" label="合同编号" min-width="140" />
+      <el-table-column prop="sp_no" label="企微流程号" width="140">
+        <template #default="{ row }">
+          <span v-if="row.sp_no" class="sp-no">{{ row.sp_no }}</span>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="type" label="类型" width="80" align="center">
         <template #default="{ row }">
           <el-tag :type="row.type === 'sale' ? 'success' : 'warning'" size="small">
@@ -472,5 +478,11 @@ onMounted(() => {
 
 .action-link {
   text-decoration: none;
+}
+
+.sp-no {
+  font-size: 12px;
+  color: #909399;
+  font-family: monospace;
 }
 </style>

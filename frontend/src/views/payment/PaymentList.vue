@@ -115,6 +115,12 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="sp_no" label="流程号" width="140">
+        <template #default="{ row }">
+          <span v-if="row.sp_no" class="sp-no">{{ row.sp_no }}</span>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="200" align="center" fixed="right">
         <template #default="{ row }">
           <!-- 仅 pending 显示确认按钮 -->
@@ -608,5 +614,11 @@ onMounted(() => {
 .text-danger {
   color: #f56c6c;
   font-weight: 500;
+}
+
+.sp-no {
+  font-size: 12px;
+  color: #909399;
+  font-family: monospace;
 }
 </style>
