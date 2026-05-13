@@ -100,11 +100,11 @@
       <el-table-column prop="account_id" label="账户" width="140">
         <template #default="{ row }">{{ accountMap[row.account_id] || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="contract_id" label="关联合同" width="100" align="center">
+      <el-table-column prop="contract_id" label="关联合同" width="180" align="center">
         <template #default="{ row }">
-          <el-button v-if="row.contract_id" type="primary" link size="small">
-            #{{ row.contract_id }}
-          </el-button>
+          <router-link v-if="row.contract_id" :to="`/contracts/${row.contract_id}`" class="contract-link">
+            {{ row.contract?.contract_no || `#${row.contract_id}` }}
+          </router-link>
           <span v-else>-</span>
         </template>
       </el-table-column>
@@ -620,5 +620,12 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   font-family: monospace;
+}
+
+.contract-link {
+  color: #409eff;
+  text-decoration: none;
+  font-size: 12px;
+  &:hover { text-decoration: underline; }
 }
 </style>

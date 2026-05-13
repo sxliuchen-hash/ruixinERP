@@ -126,6 +126,9 @@ class PaymentService {
 
     const data = await Payment.findAndCountAll({
       where,
+      include: [
+        { model: require('../models/Contract'), as: 'contract', attributes: ['id', 'contract_no'] }
+      ],
       order: [['payment_date', 'DESC'], ['create_time', 'DESC']], // 按日期倒序，同日看入库时间
       offset,
       limit
