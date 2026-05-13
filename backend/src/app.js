@@ -1,5 +1,8 @@
 require('dotenv').config();
 
+// 设置进程时区为北京时间
+process.env.TZ = 'Asia/Shanghai';
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
