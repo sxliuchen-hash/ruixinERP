@@ -51,7 +51,7 @@ class ContractService {
         { model: Customer, as: 'customer', attributes: ['id', 'name'] },
         { model: Supplier, as: 'supplier', attributes: ['id', 'name'] }
       ],
-      order: [['id', 'DESC']],
+      order: [['sign_date', 'DESC'], ['id', 'DESC']],
       offset,
       limit
     });
