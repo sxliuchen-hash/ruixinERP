@@ -54,6 +54,8 @@ router.use('/reconciliation', require('./reconciliation'));
 router.use('/export', require('./export'));
 // 历史数据导入（T20）
 router.use('/import', require('./import'));
+// 操作日志
+router.use('/logs', require('./logs'));
 
 // TODO: Phase 2 剩余
 // router.use('/wechat', require('./wechat'));
