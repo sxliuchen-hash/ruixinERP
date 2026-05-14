@@ -189,6 +189,8 @@ class WechatSyncService {
       status: contractStatus,
       sp_no: spNo,
       confirm_status: 'confirmed',
+      applyer_name: await this._getApplyerName(info),
+      our_company: fields['我方签订名称'] || '',
       remark: `企微审批自动同步 | 我方: ${fields['我方签订名称'] || '-'}`,
       created_by: createdBy
     });
@@ -346,6 +348,19 @@ class WechatSyncService {
     }
 
     return { synced, skipped, failed };
+  }
+
+  /**
+   * 获取审批申请人姓名
+   */
+  async _getApplyerName(info) {
+    if (!info.applyer || !info.applyer.userid) return '';
+    try {
+      const userInfo = await wechatApiService.getUser(info.applyer.userid);
+      return userInfo.name || info.applyer.userid;
+    } catch (e) {
+      return info.applyer.userid;
+    }
   }
 
   /**

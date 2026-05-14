@@ -87,6 +87,9 @@
         </template>
       </el-table-column>
       <el-table-column prop="sign_date" label="签订日期" width="110" align="center" />
+      <el-table-column prop="our_company" label="我方公司" width="120" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.our_company || '-' }}</template>
+      </el-table-column>
       <el-table-column prop="applyer_name" label="申请人" width="80" align="center">
         <template #default="{ row }">{{ row.applyer_name || '-' }}</template>
       </el-table-column>

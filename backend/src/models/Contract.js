@@ -82,6 +82,14 @@ const Contract = sequelize.define('Contract', {
   created_by: {
     type: DataTypes.INTEGER,
     comment: '创建人'
+  },
+  applyer_name: {
+    type: DataTypes.STRING(50),
+    comment: '审批申请人姓名'
+  },
+  our_company: {
+    type: DataTypes.STRING(100),
+    comment: '我方签订公司名称'
   }
 }, {
   tableName: 'contracts',
