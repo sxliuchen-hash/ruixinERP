@@ -78,6 +78,7 @@
                 {{ file.field }}
               </el-link>
               <span class="file-size">{{ formatFileSize(file.size) }}</span>
+              <el-button size="small" link type="info" @click="downloadFileForce(file)">下载</el-button>
             </div>
           </template>
           <div v-else class="no-attachment">暂无附件</div>
@@ -206,14 +207,23 @@ const attachmentList = computed(() => {
 
 function downloadFile(file) {
   if (!file.url) return
-  // 从 COS URL 提取 key
   const match = file.url.match(/myqcloud\.com\/(.+)$/)
   const key = match ? match[1] : ''
   if (!key) {
     window.open(file.url, '_blank')
     return
   }
-  // 通过代理接口下载（自动带 token）
+  // 预览模式（PDF/图片在新窗口打开）
+  const previewUrl = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1`
+  window.open(previewUrl, '_blank')
+}
+
+function downloadFileForce(file) {
+  if (!file.url) return
+  const match = file.url.match(/myqcloud\.com\/(.+)$/)
+  const key = match ? match[1] : ''
+  if (!key) return
+  // 强制下载模式
   const url = `/api/v1/files/download?key=${encodeURIComponent(key)}`
   window.open(url, '_blank')
 }

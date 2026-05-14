@@ -21,12 +21,12 @@ router.use(authenticate);
 router.use(requireErpAccess());
 
 /**
- * GET /files/download?key=xxx
- * 生成 COS 临时签名 URL 并重定向（有效期 10 分钟）
+ * GET /files/download?key=xxx&preview=1
+ * preview=1 时在浏览器内预览（inline），否则触发下载（attachment）
  */
 router.get('/download', async (req, res, next) => {
   try {
-    const { key } = req.query;
+    const { key, preview } = req.query;
     if (!key) {
       return res.status(400).json({ message: '缺少 key 参数' });
     }
@@ -41,19 +41,64 @@ router.get('/download', async (req, res, next) => {
       SecretKey: process.env.COS_SECRET_KEY
     });
 
-    const signedUrl = cos.getObjectUrl({
+    // 从 COS 获取文件
+    cos.getObject({
       Bucket: process.env.COS_BUCKET,
       Region: process.env.COS_REGION,
-      Key: key,
-      Sign: true,
-      Expires: 600 // 10 分钟有效
-    });
+      Key: key
+    }, (err, data) => {
+      if (err) {
+        return res.status(404).json({ message: '文件不存在' });
+      }
 
-    // 重定向到签名 URL
-    res.redirect(signedUrl);
+      // 根据文件头判断类型
+      const buffer = data.Body;
+      const contentType = detectContentType(buffer, key);
+      const filename = key.split('/').pop();
+
+      res.setHeader('Content-Type', contentType);
+      if (preview === '1' && (contentType.includes('pdf') || contentType.includes('image'))) {
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+      } else {
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+      }
+      res.end(buffer);
+    });
   } catch (e) {
     next(e);
   }
 });
+
+/**
+ * 根据文件头 magic bytes 判断 Content-Type
+ */
+function detectContentType(buffer, filename) {
+  if (!buffer || buffer.length < 4) return 'application/octet-stream';
+
+  // PDF: %PDF
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return 'application/pdf';
+  }
+  // PNG: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return 'image/png';
+  }
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return 'image/jpeg';
+  }
+  // ZIP/DOCX/XLSX: 50 4B 03 04
+  if (buffer[0] === 0x50 && buffer[1] === 0x4B && buffer[2] === 0x03 && buffer[3] === 0x04) {
+    if (filename.includes('.docx') || filename.includes('.doc')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (filename.includes('.xlsx') || filename.includes('.xls')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    return 'application/zip';
+  }
+  // GIF: 47 49 46
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+    return 'image/gif';
+  }
+
+  return 'application/octet-stream';
+}
 
 module.exports = router;
