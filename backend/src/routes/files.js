@@ -17,6 +17,13 @@ const COS = require('cos-nodejs-sdk-v5');
 const { authenticate } = require('../middlewares/auth');
 const { requireErpAccess } = require('../middlewares/permission');
 
+router.use((req, res, next) => {
+  // 支持 URL 参数传 token（用于文件预览/下载的新窗口场景）
+  if (!req.headers.authorization && req.query.token) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+  }
+  next();
+});
 router.use(authenticate);
 router.use(requireErpAccess());
 

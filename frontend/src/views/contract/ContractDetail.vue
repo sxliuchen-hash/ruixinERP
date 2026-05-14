@@ -213,8 +213,8 @@ function downloadFile(file) {
     window.open(file.url, '_blank')
     return
   }
-  // 预览模式（PDF/图片在新窗口打开）
-  const previewUrl = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1`
+  const token = userStore.token
+  const previewUrl = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1&token=${encodeURIComponent(token)}`
   window.open(previewUrl, '_blank')
 }
 
@@ -223,8 +223,8 @@ function downloadFileForce(file) {
   const match = file.url.match(/myqcloud\.com\/(.+)$/)
   const key = match ? match[1] : ''
   if (!key) return
-  // 强制下载模式
-  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}`
+  const token = userStore.token
+  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}&token=${encodeURIComponent(token)}`
   window.open(url, '_blank')
 }
 
