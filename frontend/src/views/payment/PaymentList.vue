@@ -121,6 +121,9 @@
           <span v-else>-</span>
         </template>
       </el-table-column>
+      <el-table-column prop="applyer_name" label="申请人" width="80" align="center">
+        <template #default="{ row }">{{ row.applyer_name || '-' }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="200" align="center" fixed="right">
         <template #default="{ row }">
           <!-- 仅 pending 显示确认按钮 -->

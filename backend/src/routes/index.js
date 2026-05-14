@@ -60,6 +60,8 @@ router.use('/logs', require('./logs'));
 router.use('/classify-rules', require('./classifyRules'));
 // 员工档案
 router.use('/employees', require('./employees'));
+// 文件代理下载
+router.use('/files', require('./files'));
 
 // TODO: Phase 2 剩余
 // router.use('/wechat', require('./wechat'));
