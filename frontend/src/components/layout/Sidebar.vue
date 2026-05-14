@@ -74,6 +74,7 @@
           <span>系统设置</span>
         </template>
         <el-menu-item index="/employees">员工档案</el-menu-item>
+        <el-menu-item index="/salary-rules">薪资规则</el-menu-item>
         <el-menu-item index="/system/templates">审批模板映射</el-menu-item>
         <el-menu-item index="/system/classify-rules">归类规则</el-menu-item>
         <el-menu-item index="/system/wechat-bindings">企微绑定</el-menu-item>

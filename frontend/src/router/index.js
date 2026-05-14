@@ -135,6 +135,13 @@ const routes = [
         component: () => import('@/views/performance/PerformanceDashboard.vue'),
         meta: { title: '业绩统计' }
       },
+      // 薪资规则配置（T-HR2）
+      {
+        path: 'salary-rules',
+        name: 'SalaryRules',
+        component: () => import('@/views/salary/SalaryRuleConfig.vue'),
+        meta: { title: '薪资规则', role: 'admin' }
+      },
       // 员工档案（仅 admin）
       {
         path: 'employees',
