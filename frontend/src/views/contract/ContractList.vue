@@ -45,10 +45,14 @@
 
     <!-- 合同列表表格 -->
     <el-table :data="contractList" v-loading="loading" border stripe>
-      <el-table-column prop="contract_no" label="合同编号" min-width="140" />
+      <el-table-column prop="contract_no" label="合同编号" min-width="140">
+        <template #default="{ row }">
+          <router-link :to="`/contracts/${row.id}`" class="action-link">{{ row.contract_no }}</router-link>
+        </template>
+      </el-table-column>
       <el-table-column prop="sp_no" label="企微流程号" width="140">
         <template #default="{ row }">
-          <span v-if="row.sp_no" class="sp-no">{{ row.sp_no }}</span>
+          <router-link v-if="row.sp_no" :to="`/contracts/${row.id}`" class="sp-link">{{ row.sp_no }}</router-link>
           <span v-else>-</span>
         </template>
       </el-table-column>
@@ -484,6 +488,16 @@ onMounted(() => {
 
 .action-link {
   text-decoration: none;
+  color: #409eff;
+  &:hover { text-decoration: underline; }
+}
+
+.sp-link {
+  text-decoration: none;
+  color: #909399;
+  font-size: 12px;
+  font-family: monospace;
+  &:hover { color: #409eff; text-decoration: underline; }
 }
 
 .sp-no {
