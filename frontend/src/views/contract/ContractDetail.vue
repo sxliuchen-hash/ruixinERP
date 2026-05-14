@@ -71,12 +71,15 @@
       <div class="section">
         <h4>合同附件</h4>
         <div class="attachment-area">
-          <div v-if="contract.attachment_url" class="attachment-item">
-            <el-link :href="contract.attachment_url" target="_blank" type="primary">
-              <el-icon><Document /></el-icon>
-              查看合同扫描件
-            </el-link>
-          </div>
+          <template v-if="attachmentList.length > 0">
+            <div v-for="(file, idx) in attachmentList" :key="idx" class="attachment-item">
+              <el-link type="primary" @click="downloadFile(file)">
+                <el-icon><Document /></el-icon>
+                {{ file.field }}
+              </el-link>
+              <span class="file-size">{{ formatFileSize(file.size) }}</span>
+            </div>
+          </template>
           <div v-else class="no-attachment">暂无附件</div>
           <el-upload
             :action="uploadUrl"
@@ -89,7 +92,7 @@
           >
             <el-button type="primary" plain size="small">
               <el-icon><Upload /></el-icon>
-              {{ contract.attachment_url ? '重新上传' : '上传附件' }}
+              上传附件
             </el-button>
           </el-upload>
           <span class="upload-tip">支持 PDF、图片、Word 文件，大小不超过 10MB</span>
@@ -185,6 +188,42 @@ const loading = ref(false)
 const contract = ref({})
 const payments = ref([])
 const invoices = ref([])
+
+// 附件列表（从 JSON 字段解析）
+const attachmentList = computed(() => {
+  if (!contract.value?.attachment_url) return []
+  try {
+    const parsed = JSON.parse(contract.value.attachment_url)
+    return Array.isArray(parsed) ? parsed : []
+  } catch (e) {
+    // 兼容旧格式（单个 URL 字符串）
+    if (contract.value.attachment_url.startsWith('http')) {
+      return [{ field: '附件', url: contract.value.attachment_url, size: 0 }]
+    }
+    return []
+  }
+})
+
+function downloadFile(file) {
+  if (!file.url) return
+  // 从 COS URL 提取 key
+  const match = file.url.match(/myqcloud\.com\/(.+)$/)
+  const key = match ? match[1] : ''
+  if (!key) {
+    window.open(file.url, '_blank')
+    return
+  }
+  // 通过代理接口下载（自动带 token）
+  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}`
+  window.open(url, '_blank')
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
 
 // 上传相关
 const uploadUrl = computed(() => `/api/v1/contracts/${route.params.id}/attachment`)
@@ -358,7 +397,13 @@ onMounted(() => {
 .attachment-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #909399;
 }
 
 .no-attachment {
