@@ -26,6 +26,7 @@
         <el-menu-item index="/payments">收付款</el-menu-item>
         <el-menu-item index="/invoices">发票管理</el-menu-item>
         <el-menu-item index="/projects">交易项目</el-menu-item>
+        <el-menu-item index="/performance">业绩统计</el-menu-item>
       </el-sub-menu>
 
       <!-- 费用 -->

@@ -128,6 +128,13 @@ const routes = [
         component: () => import('@/views/import/ImportPage.vue'),
         meta: { title: '数据导入' }
       },
+      // 业绩统计看板（T-HR3）
+      {
+        path: 'performance',
+        name: 'Performance',
+        component: () => import('@/views/performance/PerformanceDashboard.vue'),
+        meta: { title: '业绩统计' }
+      },
       // 员工档案（仅 admin）
       {
         path: 'employees',

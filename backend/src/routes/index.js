@@ -62,6 +62,8 @@ router.use('/classify-rules', require('./classifyRules'));
 router.use('/employees', require('./employees'));
 // 文件代理下载
 router.use('/files', require('./files'));
+// 业绩统计（T-HR3）
+router.use('/performance', require('./performance'));
 
 // TODO: Phase 2 剩余
 // router.use('/wechat', require('./wechat'));
