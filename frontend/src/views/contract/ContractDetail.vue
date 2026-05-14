@@ -73,12 +73,13 @@
         <div class="attachment-area">
           <template v-if="attachmentList.length > 0">
             <div v-for="(file, idx) in attachmentList" :key="idx" class="attachment-item">
-              <el-link type="primary" @click="downloadFile(file)">
+              <el-link type="primary" @click="previewFile(file)">
                 <el-icon><Document /></el-icon>
                 {{ file.field }}
               </el-link>
               <span class="file-size">{{ formatFileSize(file.size) }}</span>
               <el-button size="small" link type="info" @click="downloadFileForce(file)">下载</el-button>
+              <el-button size="small" link type="primary" @click="openInNewWindow(file)">新窗口</el-button>
             </div>
           </template>
           <div v-else class="no-attachment">暂无附件</div>
@@ -169,6 +170,30 @@
       </div>
     </div>
   </div>
+
+  <!-- 文件预览弹窗 -->
+  <el-dialog
+    v-model="previewVisible"
+    :title="previewTitle"
+    width="80%"
+    top="5vh"
+    destroy-on-close
+    class="preview-dialog"
+  >
+    <div class="preview-content">
+      <iframe
+        v-if="previewUrl"
+        :src="previewUrl"
+        class="preview-iframe"
+        frameborder="0"
+      />
+    </div>
+    <template #footer>
+      <el-button @click="previewVisible = false">关闭</el-button>
+      <el-button type="primary" @click="openInNewWindow(currentPreviewFile)">新窗口打开</el-button>
+      <el-button type="success" @click="downloadFileForce(currentPreviewFile)">下载</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -205,26 +230,38 @@ const attachmentList = computed(() => {
   }
 })
 
-function downloadFile(file) {
-  if (!file.url) return
+// 文件预览
+const previewVisible = ref(false)
+const previewUrl = ref('')
+const previewTitle = ref('')
+const currentPreviewFile = ref(null)
+
+function getFileKey(file) {
+  if (!file || !file.url) return ''
   const match = file.url.match(/myqcloud\.com\/(.+)$/)
-  const key = match ? match[1] : ''
-  if (!key) {
-    window.open(file.url, '_blank')
-    return
-  }
-  const token = userStore.token
-  const previewUrl = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1&token=${encodeURIComponent(token)}`
-  window.open(previewUrl, '_blank')
+  return match ? match[1] : ''
+}
+
+function previewFile(file) {
+  const key = getFileKey(file)
+  if (!key) return
+  currentPreviewFile.value = file
+  previewTitle.value = file.field || '文件预览'
+  previewUrl.value = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1&token=${encodeURIComponent(userStore.token)}`
+  previewVisible.value = true
+}
+
+function openInNewWindow(file) {
+  const key = getFileKey(file)
+  if (!key) return
+  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1&token=${encodeURIComponent(userStore.token)}`
+  window.open(url, '_blank')
 }
 
 function downloadFileForce(file) {
-  if (!file.url) return
-  const match = file.url.match(/myqcloud\.com\/(.+)$/)
-  const key = match ? match[1] : ''
+  const key = getFileKey(file)
   if (!key) return
-  const token = userStore.token
-  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}&token=${encodeURIComponent(token)}`
+  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}&token=${encodeURIComponent(userStore.token)}`
   window.open(url, '_blank')
 }
 
@@ -414,6 +451,16 @@ onMounted(() => {
 .file-size {
   font-size: 12px;
   color: #909399;
+}
+
+.preview-content {
+  height: 70vh;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 .no-attachment {
