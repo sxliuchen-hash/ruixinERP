@@ -305,6 +305,7 @@ class WechatSyncService {
       summary: summary.slice(0, 500),
       sp_no: spNo,
       confirm_status: 'confirmed',
+      applyer_name: await this._getApplyerName(info),
       remark: `企微付款审批自动同步 | 方式: ${paymentMethodName}`,
       created_by: createdBy
     });

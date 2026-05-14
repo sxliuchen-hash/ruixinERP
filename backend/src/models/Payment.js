@@ -107,6 +107,14 @@ const Payment = sequelize.define('Payment', {
   created_by: {
     type: DataTypes.INTEGER,
     comment: '创建人（agent 数据隔离依据）'
+  },
+  applyer_name: {
+    type: DataTypes.STRING(50),
+    comment: '审批申请人姓名'
+  },
+  payment_no: {
+    type: DataTypes.STRING(50),
+    comment: '付款编号'
   }
 }, {
   tableName: 'payments',
