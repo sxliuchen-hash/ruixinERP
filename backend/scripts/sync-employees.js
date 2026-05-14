@@ -1,6 +1,7 @@
 /**
  * 同步 employees 表结构到数据库
  */
+require('dotenv').config();
 const { connectDatabase } = require('../src/config/database');
 const Employee = require('../src/models/Employee');
 
