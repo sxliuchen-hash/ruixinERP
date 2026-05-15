@@ -137,9 +137,9 @@ const routes = [
       },
       // 薪资规则配置（T-HR2）
       {
-        path: 'salary-rules',
+        path: 'system/salary-rules',
         name: 'SalaryRules',
-        component: () => import('@/views/salary/SalaryRuleConfig.vue'),
+        component: () => import('@/views/system/SalaryRules.vue'),
         meta: { title: '薪资规则', role: 'admin' }
       },
       // 员工档案（仅 admin）

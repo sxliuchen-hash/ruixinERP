@@ -3,7 +3,8 @@
  * 薪资规则路由
  * ============================================================
  * 路由前缀：/api/v1/salary-rules
- * 权限：admin 可读写，其他角色只读
+ * 权限：authenticate + admin（仅管理员可修改规则）
+ *       查询接口所有角色可访问（用于前端展示提成规则等）
  * ============================================================
  */
 const express = require('express');
@@ -13,22 +14,21 @@ const { requireErpAccess, requireAdmin } = require('../middlewares/permission');
 const salaryRuleService = require('../services/salaryRuleService');
 
 router.use(authenticate);
-router.use(requireErpAccess());
 
-// GET /salary-rules - 获取所有规则（按分类分组）
-router.get('/', async (req, res, next) => {
+// GET /salary-rules - 获取所有规则（所有角色可查看）
+router.get('/', requireErpAccess(), async (req, res, next) => {
   try {
-    const data = await salaryRuleService.getAllRules();
-    res.json({ success: true, data });
+    const rules = await salaryRuleService.getAllRules();
+    res.json({ success: true, data: rules });
   } catch (e) { next(e); }
 });
 
-// GET /salary-rules/:key - 获取单条规则
-router.get('/:key', async (req, res, next) => {
+// GET /salary-rules/:type - 获取指定类型规则
+router.get('/:type', requireErpAccess(), async (req, res, next) => {
   try {
-    const data = await salaryRuleService.getRuleByKey(req.params.key);
-    if (!data) return res.status(404).json({ success: false, message: '规则不存在' });
-    res.json({ success: true, data });
+    const rule = await salaryRuleService.getRule(req.params.type);
+    if (!rule) return res.status(404).json({ success: false, message: '规则不存在' });
+    res.json({ success: true, data: rule });
   } catch (e) { next(e); }
 });
 
@@ -36,15 +36,23 @@ router.get('/:key', async (req, res, next) => {
 router.post('/init', requireAdmin(), async (req, res, next) => {
   try {
     const result = await salaryRuleService.initDefaultRules();
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: result, message: result.initialized ? '已初始化默认规则' : '规则已存在，无需初始化' });
   } catch (e) { next(e); }
 });
 
-// PUT /salary-rules/:id - 更新规则（仅 admin）
-router.put('/:id', requireAdmin(), async (req, res, next) => {
+// PUT /salary-rules/:type - 更新规则（仅 admin）
+router.put('/:type', requireAdmin(), async (req, res, next) => {
   try {
-    const data = await salaryRuleService.updateRule(req.params.id, req.body);
-    res.json({ success: true, data, message: '规则已更新' });
+    const rule = await salaryRuleService.updateRule(req.params.type, req.body);
+    res.json({ success: true, data: rule, message: '规则已更新' });
+  } catch (e) { next(e); }
+});
+
+// POST /salary-rules/:type/reset - 重置为默认值（仅 admin）
+router.post('/:type/reset', requireAdmin(), async (req, res, next) => {
+  try {
+    const rule = await salaryRuleService.resetRule(req.params.type);
+    res.json({ success: true, data: rule, message: '已重置为默认值' });
   } catch (e) { next(e); }
 });
 

@@ -3,14 +3,14 @@
  */
 import request from './request'
 
-/** 获取所有规则（按分类分组） */
-export function getSalaryRules() {
+/** 获取所有规则 */
+export function getAllSalaryRules() {
   return request.get('/salary-rules')
 }
 
-/** 获取单条规则 */
-export function getSalaryRule(key) {
-  return request.get(`/salary-rules/${key}`)
+/** 获取指定类型规则 */
+export function getSalaryRule(type) {
+  return request.get(`/salary-rules/${type}`)
 }
 
 /** 初始化默认规则 */
@@ -19,6 +19,11 @@ export function initSalaryRules() {
 }
 
 /** 更新规则 */
-export function updateSalaryRule(id, data) {
-  return request.put(`/salary-rules/${id}`, data)
+export function updateSalaryRule(type, data) {
+  return request.put(`/salary-rules/${type}`, data)
+}
+
+/** 重置规则为默认值 */
+export function resetSalaryRule(type) {
+  return request.post(`/salary-rules/${type}/reset`)
 }

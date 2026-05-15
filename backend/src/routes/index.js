@@ -66,6 +66,8 @@ router.use('/files', require('./files'));
 router.use('/performance', require('./performance'));
 // 薪资规则配置（T-HR2）
 router.use('/salary-rules', require('./salaryRules'));
+// 薪资规则配置（T-HR2）
+router.use('/salary-rules', require('./salaryRules'));
 
 // TODO: Phase 2 剩余
 // router.use('/wechat', require('./wechat'));
