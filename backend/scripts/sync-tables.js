@@ -6,6 +6,7 @@ require('dotenv').config();
 const { connectDatabase } = require('../src/config/database');
 const Employee = require('../src/models/Employee');
 const SalaryRule = require('../src/models/SalaryRule');
+const Payroll = require('../src/models/Payroll');
 
 async function run() {
   await connectDatabase();
@@ -13,6 +14,8 @@ async function run() {
   console.log('✅ employees table synced');
   await SalaryRule.sync({ force: false });
   console.log('✅ salary_rules table synced');
+  await Payroll.sync({ force: false });
+  console.log('✅ payrolls table synced');
   process.exit(0);
 }
 

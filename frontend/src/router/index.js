@@ -142,6 +142,13 @@ const routes = [
         component: () => import('@/views/system/SalaryRules.vue'),
         meta: { title: '薪资规则', role: 'admin' }
       },
+      // 工资条管理（T-HR4）
+      {
+        path: 'payroll',
+        name: 'Payroll',
+        component: () => import('@/views/payroll/PayrollList.vue'),
+        meta: { title: '工资条', role: 'admin' }
+      },
       // 员工档案（仅 admin）
       {
         path: 'employees',
