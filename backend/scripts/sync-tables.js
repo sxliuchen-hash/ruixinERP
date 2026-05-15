@@ -1,23 +1,22 @@
 /**
- * 临时脚本：同步所有模型到数据库（创建表结构）
- * 用法：node scripts/sync-tables.js
+ * 同步所有模型表结构到数据库
+ * 用法: node scripts/sync-tables.js
  */
-const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config();
+const { connectDatabase } = require('../src/config/database');
+const Employee = require('../src/models/Employee');
+const SalaryRule = require('../src/models/SalaryRule');
 
-async function main() {
-  // 加载所有模型（会触发关联关系定义）
-  const { sequelize } = require('../src/models');
-
-  console.log('开始同步表结构...');
-  await sequelize.sync({ force: false, alter: false });
-  console.log('表结构同步完成！');
-
-  await sequelize.close();
+async function run() {
+  await connectDatabase();
+  await Employee.sync({ force: false });
+  console.log('✅ employees table synced');
+  await SalaryRule.sync({ force: false });
+  console.log('✅ salary_rules table synced');
   process.exit(0);
 }
 
-main().catch(e => {
-  console.error('同步失败:', e.message);
+run().catch(e => {
+  console.error('❌ Failed:', e.message);
   process.exit(1);
 });
