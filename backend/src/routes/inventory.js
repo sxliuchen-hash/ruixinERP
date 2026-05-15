@@ -26,6 +26,7 @@
  */
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const inventoryController = require('../controllers/inventoryController');
 const { authenticate } = require('../middlewares/auth');
 const { requireErpAccess, attachDataFilter } = require('../middlewares/permission');
@@ -42,6 +43,19 @@ const {
   expiringQuerySchema
 } = require('../validators/inventory');
 
+// multer 内存存储（批量导入用）
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.originalname.match(/\.xlsx?$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('仅支持 .xlsx 或 .xls 格式'));
+    }
+  }
+});
+
 router.use(authenticate);
 router.use(requireErpAccess());
 router.use(attachDataFilter({ ownerField: 'created_by' }));
@@ -56,6 +70,17 @@ router.put('/batch-price',
   validate(batchChangePriceSchema),
   operationLog('update', 'patent_inventory'),
   inventoryController.batchChangePrice
+);
+
+// ===== 批量入库 =====
+router.get('/batch-import/template', inventoryController.batchImportTemplate);
+router.post('/batch-import/validate',
+  upload.single('file'),
+  inventoryController.batchImportValidate
+);
+router.post('/batch-import/execute',
+  operationLog('create', 'patent_inventory'),
+  inventoryController.batchImportExecute
 );
 
 // ===== 列表 / 入库 =====

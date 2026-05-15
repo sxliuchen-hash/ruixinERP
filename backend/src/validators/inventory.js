@@ -27,6 +27,7 @@ const createInventorySchema = Joi.object({
   current_price: Joi.number().min(0).default(0),
   next_fee_deadline: Joi.date().iso().allow('', null),
   stock_in_date: Joi.date().iso().allow('', null),
+  reported_high_tech: Joi.boolean().default(false),
   remark: Joi.string().allow('', null)
 });
 
@@ -46,6 +47,7 @@ const updateInventorySchema = Joi.object({
   next_fee_deadline: Joi.date().iso().allow('', null),
   stock_in_date: Joi.date().iso().allow('', null),
   stock_out_date: Joi.date().iso().allow('', null),
+  reported_high_tech: Joi.boolean().allow(null),
   remark: Joi.string().allow('', null)
 }).min(1).messages({
   'object.min': '至少需要提供一个更新字段'

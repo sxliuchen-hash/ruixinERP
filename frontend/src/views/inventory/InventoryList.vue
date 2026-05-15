@@ -98,6 +98,9 @@
         <el-button type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>入库
         </el-button>
+        <el-button type="primary" plain @click="openBatchImport">
+          <el-icon><Upload /></el-icon>批量入库
+        </el-button>
       </div>
     </div>
 
@@ -378,6 +381,14 @@
           />
         </el-form-item>
 
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="报过高企">
+              <el-switch v-model="formData.reported_high_tech" active-text="是" inactive-text="否" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
         <el-form-item label="备注">
           <el-input v-model="formData.remark" type="textarea" :rows="2" placeholder="备注信息" />
         </el-form-item>
@@ -565,13 +576,16 @@
         </el-table>
       </div>
     </el-drawer>
+
+    <!-- ===== 批量入库弹窗 ===== -->
+    <BatchImportDialog ref="batchImportRef" @success="handleBatchImportSuccess" />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Money, Bell, ArrowDown } from '@element-plus/icons-vue'
+import { Search, Plus, Money, Bell, ArrowDown, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getInventoryList,
@@ -589,6 +603,7 @@ import { INVENTORY_STATUS_MAP } from '@/utils/constants'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ContractSelect from '@/components/business/ContractSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
+import BatchImportDialog from './BatchImportDialog.vue'
 
 const router = useRouter()
 
@@ -641,6 +656,7 @@ const formData = reactive({
   contract_id: null,
   status: 'in_stock',
   next_fee_deadline: null,
+  reported_high_tech: false,
   remark: ''
 })
 
@@ -685,6 +701,9 @@ const expiringDrawerVisible = ref(false)
 const expiringLoading = ref(false)
 const expiringDays = ref(60)
 const expiringList = ref([])
+
+// ===== 批量入库 =====
+const batchImportRef = ref(null)
 
 // ===== 数据拉取 =====
 
@@ -757,6 +776,7 @@ function resetForm() {
     contract_id: null,
     status: 'in_stock',
     next_fee_deadline: null,
+    reported_high_tech: false,
     remark: ''
   })
 }
@@ -783,6 +803,7 @@ function handleEdit(row) {
     contract_id: row.contract_id || null,
     status: row.status,
     next_fee_deadline: row.next_fee_deadline || null,
+    reported_high_tech: row.reported_high_tech || false,
     remark: row.remark || ''
   })
   dialogVisible.value = true
@@ -950,6 +971,16 @@ function openExpiringDrawer() {
 function goDetailFromDrawer(row) {
   expiringDrawerVisible.value = false
   router.push(`/inventory/${row.id}`)
+}
+
+// 批量入库
+function openBatchImport() {
+  batchImportRef.value?.open()
+}
+
+function handleBatchImportSuccess() {
+  fetchList()
+  fetchOverview()
 }
 
 /**

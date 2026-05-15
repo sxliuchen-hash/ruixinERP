@@ -8,6 +8,8 @@
  */
 
 const inventoryService = require('../services/inventoryService');
+const inventoryBatchService = require('../services/inventoryBatchService');
+const { sendExcel } = require('../utils/excelHelper');
 
 /** GET /api/v1/inventory */
 async function getList(req, res, next) {
@@ -165,6 +167,55 @@ async function deleteAnnualFee(req, res, next) {
   }
 }
 
+/** GET /api/v1/inventory/batch-import/template - 下载批量入库模板 */
+async function batchImportTemplate(req, res, next) {
+  try {
+    const { buffer, filename } = await inventoryBatchService.generateTemplate();
+    sendExcel(res, buffer, filename);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** POST /api/v1/inventory/batch-import/validate - 上传 Excel 预览校验 */
+async function batchImportValidate(req, res, next) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: '请上传 Excel 文件' });
+    }
+    const result = await inventoryBatchService.parseAndValidate(req.file.buffer);
+    res.json({
+      success: true,
+      message: '校验完成',
+      data: {
+        total: result.total,
+        validCount: result.valid.length,
+        errorCount: result.errors.length,
+        valid: result.valid,
+        errors: result.errors
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** POST /api/v1/inventory/batch-import/execute - 确认批量入库 */
+async function batchImportExecute(req, res, next) {
+  try {
+    const { validRows } = req.body;
+    const userId = req.user.id;
+    const result = await inventoryBatchService.batchImport(validRows, userId, req);
+    res.json({
+      success: true,
+      message: `批量入库完成：成功 ${result.imported} 条，跳过 ${result.skipped} 条，失败 ${result.failed} 条`,
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getList,
   getOverview,
@@ -177,5 +228,8 @@ module.exports = {
   changePrice,
   batchChangePrice,
   addAnnualFee,
-  deleteAnnualFee
+  deleteAnnualFee,
+  batchImportTemplate,
+  batchImportValidate,
+  batchImportExecute
 };

@@ -114,6 +114,11 @@ const PatentInventory = sequelize.define('PatentInventory', {
     type: DataTypes.TEXT,
     comment: '备注'
   },
+  reported_high_tech: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: '是否报过高企'
+  },
   created_by: {
     type: DataTypes.INTEGER,
     comment: '创建人（agent 数据隔离依据）'

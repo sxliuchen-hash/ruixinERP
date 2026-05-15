@@ -240,6 +240,25 @@ export const PROJECT_STATUS_MAP = {
 }
 
 /**
+ * IP 系统年费状态（来自 IP 系统 patent-fee 接口）
+ */
+export const IP_FEE_STATUS = {
+  NORMAL: 'normal',
+  OVERDUE: 'overdue',
+  RECOVERY: 'recovery',
+  PAID: 'paid',
+  TERMINATED: 'terminated'
+}
+
+export const IP_FEE_STATUS_MAP = {
+  [IP_FEE_STATUS.NORMAL]: { label: '正常', type: 'success' },
+  [IP_FEE_STATUS.OVERDUE]: { label: '逾期', type: 'danger' },
+  [IP_FEE_STATUS.RECOVERY]: { label: '恢复期', type: 'warning' },
+  [IP_FEE_STATUS.PAID]: { label: '已缴', type: '' },
+  [IP_FEE_STATUS.TERMINATED]: { label: '已终止', type: 'info' }
+}
+
+/**
  * 成本大类（与后端 cost_categories.type 枚举一致）
  */
 export const COST_CATEGORY_TYPE = {

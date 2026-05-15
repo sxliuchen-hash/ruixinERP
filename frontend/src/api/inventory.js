@@ -105,3 +105,32 @@ export function getInventoryOverview() {
 export function getExpiringInventory(params) {
   return request.get('/inventory/expiring', { params })
 }
+
+// ============ 批量入库 ============
+
+/** 下载批量入库模板 */
+export function downloadBatchImportTemplate() {
+  return request.get('/inventory/batch-import/template', {
+    responseType: 'blob'
+  })
+}
+
+/**
+ * 上传 Excel 预览校验
+ * @param {File} file - Excel 文件
+ */
+export function validateBatchImport(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/inventory/batch-import/validate', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+/**
+ * 确认批量入库
+ * @param {Array} validRows - 校验通过的行数据
+ */
+export function executeBatchImport(validRows) {
+  return request.post('/inventory/batch-import/execute', { validRows })
+}

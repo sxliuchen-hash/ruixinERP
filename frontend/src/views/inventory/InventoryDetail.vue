@@ -214,6 +214,191 @@
       </el-col>
     </el-row>
 
+    <!-- ===== IP 系统年费信息（来自知识产权管理系统） ===== -->
+    <el-card shadow="never" class="section-card ip-section" v-if="detail" style="margin-top: 16px">
+      <template #header>
+        <div class="section-header">
+          <span>
+            <el-icon style="margin-right: 4px"><Connection /></el-icon>
+            国知局年费信息（来自 IP 系统）
+          </span>
+          <div class="ip-header-actions">
+            <span v-if="ipFeeData?.patent?.lastFeeQueryAt" class="ip-update-time">
+              数据更新于：{{ formatDateTime(ipFeeData.patent.lastFeeQueryAt) }}
+            </span>
+            <el-button
+              type="primary"
+              size="small"
+              :loading="ipFeeLoading"
+              @click="fetchIpFeeDetail"
+            >
+              <el-icon><Refresh /></el-icon>刷新年费
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 未加载状态 -->
+      <div v-if="!ipFeeLoaded && !ipFeeLoading" class="ip-empty-hint">
+        <el-button type="primary" @click="fetchIpFeeDetail">
+          <el-icon><Download /></el-icon>查询国知局年费信息
+        </el-button>
+        <p class="form-tip">点击按钮从 IP 系统获取该专利的最新年费数据</p>
+      </div>
+
+      <!-- 加载中 -->
+      <div v-else-if="ipFeeLoading" v-loading="true" style="min-height: 120px"></div>
+
+      <!-- 加载失败 -->
+      <el-alert
+        v-else-if="ipFeeError"
+        :title="ipFeeError"
+        type="warning"
+        show-icon
+        :closable="false"
+        style="margin-bottom: 12px"
+      />
+
+      <!-- 数据展示 -->
+      <template v-else-if="ipFeeData">
+        <!-- 年费状态概览 -->
+        <el-row :gutter="16" style="margin-bottom: 16px">
+          <el-col :span="6">
+            <div class="ip-stat-card">
+              <div class="ip-stat-label">年费状态</div>
+              <el-tag :type="IP_FEE_STATUS_MAP[ipFeeData.patent?.feeStatus]?.type" size="large">
+                {{ IP_FEE_STATUS_MAP[ipFeeData.patent?.feeStatus]?.label || '未知' }}
+              </el-tag>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="ip-stat-card">
+              <div class="ip-stat-label">应缴金额</div>
+              <div class="ip-stat-val text-danger">
+                ¥ {{ ipFeeData.patent?.feeAmount || 0 }}
+                <span v-if="ipFeeData.patent?.feeSurcharge > 0" class="surcharge-tip">
+                  (含滞纳金 ¥{{ ipFeeData.patent.feeSurcharge }})
+                </span>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="ip-stat-card">
+              <div class="ip-stat-label">缴费截止日</div>
+              <div class="ip-stat-val" :class="getDeadlineClass(ipFeeData.patent?.nextFeeDeadline)">
+                {{ ipFeeData.patent?.nextFeeDeadline || '-' }}
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="ip-stat-card">
+              <div class="ip-stat-label">当前年度</div>
+              <div class="ip-stat-val">第 {{ ipFeeData.patent?.feeYear || '-' }} 年</div>
+            </div>
+          </el-col>
+        </el-row>
+
+        <!-- 专利法律状态 -->
+        <el-descriptions :column="3" border size="small" style="margin-bottom: 16px">
+          <el-descriptions-item label="法律状态">
+            {{ ipFeeData.patent?.legalStatus || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="业务状态">
+            {{ ipFeeData.patent?.patentStatusText || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="申请人">
+            {{ ipFeeData.patent?.appPerson || '-' }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 详细信息（发明人/代理等） -->
+        <el-descriptions
+          v-if="ipFeeData.detail"
+          :column="3"
+          border
+          size="small"
+          title="专利详细信息"
+          style="margin-bottom: 16px"
+        >
+          <el-descriptions-item label="发明人">{{ ipFeeData.detail.inventor || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="代理机构">{{ ipFeeData.detail.agency || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="代理人">{{ ipFeeData.detail.agent || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="IPC 分类号">{{ ipFeeData.detail.ipcCode || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="授权日">{{ ipFeeData.detail.grantDate || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="授权公告号">{{ ipFeeData.detail.grantNumber || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 应缴年费 -->
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <h4 class="ip-sub-title">应缴费用（{{ ipFeeData.feesDue?.length || 0 }} 项）</h4>
+            <el-table
+              v-if="ipFeeData.feesDue?.length"
+              :data="ipFeeData.feesDue"
+              border
+              stripe
+              size="small"
+            >
+              <el-table-column prop="feeName" label="费用名称" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="amount" label="金额" width="100" align="right">
+                <template #default="{ row }">¥ {{ row.amount }}</template>
+              </el-table-column>
+              <el-table-column prop="deadline" label="截止日" width="110" align="center" />
+              <el-table-column prop="feeStatus" label="状态" width="80" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.feeStatus === '应缴' ? 'danger' : 'info'" size="small">
+                    {{ row.feeStatus }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-else description="无应缴费用" :image-size="60" />
+          </el-col>
+
+          <el-col :span="12">
+            <h4 class="ip-sub-title">已缴费用（{{ ipFeeData.feesPaid?.length || 0 }} 项）</h4>
+            <el-table
+              v-if="ipFeeData.feesPaid?.length"
+              :data="ipFeeData.feesPaid"
+              border
+              stripe
+              size="small"
+              :max-height="300"
+            >
+              <el-table-column prop="feeName" label="费用名称" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="amount" label="金额" width="100" align="right">
+                <template #default="{ row }">¥ {{ row.amount }}</template>
+              </el-table-column>
+              <el-table-column prop="paidDate" label="缴费日" width="110" align="center" />
+              <el-table-column prop="payer" label="缴费人" min-width="120" show-overflow-tooltip />
+            </el-table>
+            <el-empty v-else description="无已缴记录" :image-size="60" />
+          </el-col>
+        </el-row>
+
+        <!-- 发文信息 -->
+        <div v-if="ipFeeData.dispatches?.length" style="margin-top: 16px">
+          <h4 class="ip-sub-title">发文记录（{{ ipFeeData.dispatches.length }} 条）</h4>
+          <el-table :data="ipFeeData.dispatches" border stripe size="small" :max-height="240">
+            <el-table-column prop="noticeName" label="通知名称" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="dispatchDate" label="发文日期" width="110" align="center" />
+            <el-table-column prop="dispatchMethod" label="发送方式" width="80" align="center" />
+            <el-table-column prop="recipient" label="收件人" min-width="140" show-overflow-tooltip />
+          </el-table>
+        </div>
+
+        <!-- 变更信息 -->
+        <div v-if="ipFeeData.changes?.length" style="margin-top: 16px">
+          <h4 class="ip-sub-title">变更记录（{{ ipFeeData.changes.length }} 条）</h4>
+          <el-table :data="ipFeeData.changes" border stripe size="small" :max-height="240">
+            <el-table-column prop="changeName" label="变更事项" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="changeDate" label="变更日期" width="110" align="center" />
+            <el-table-column prop="changeContent" label="变更内容" min-width="200" show-overflow-tooltip />
+          </el-table>
+        </div>
+      </template>
+    </el-card>
+
     <!-- ===== 调价弹窗 ===== -->
     <el-dialog
       v-model="priceDialogVisible"
@@ -323,7 +508,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, ArrowDown, Money, Plus } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, ArrowDown, Money, Plus, Refresh, Download, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getInventoryDetail,
@@ -332,8 +517,9 @@ import {
   addAnnualFee,
   deleteAnnualFee
 } from '@/api/inventory'
+import { getPatentFeeDetail } from '@/api/patentFee'
 import { formatMoney, formatDate } from '@/utils/format'
-import { INVENTORY_STATUS_MAP, FEE_TYPE_MAP } from '@/utils/constants'
+import { INVENTORY_STATUS_MAP, FEE_TYPE_MAP, IP_FEE_STATUS_MAP } from '@/utils/constants'
 
 const route = useRoute()
 const router = useRouter()
@@ -371,6 +557,12 @@ const feeFormRules = {
   fee_date: [{ required: true, message: '请选择缴费日期', trigger: 'change' }]
 }
 
+// ===== IP 系统年费数据 =====
+const ipFeeLoading = ref(false)
+const ipFeeLoaded = ref(false)
+const ipFeeData = ref(null)
+const ipFeeError = ref('')
+
 // ===== 数据拉取 =====
 
 async function fetchDetail() {
@@ -384,6 +576,34 @@ async function fetchDetail() {
   } finally {
     loading.value = false
   }
+}
+
+/** 从 IP 系统获取年费详情 */
+async function fetchIpFeeDetail() {
+  if (!detail.value?.patent_no) return
+
+  ipFeeLoading.value = true
+  ipFeeError.value = ''
+  try {
+    const res = await getPatentFeeDetail(detail.value.patent_no)
+    ipFeeData.value = res.data || null
+    ipFeeLoaded.value = true
+  } catch (e) {
+    ipFeeError.value = e?.response?.data?.message || e?.message || '获取 IP 系统年费信息失败'
+    ipFeeLoaded.value = true
+  } finally {
+    ipFeeLoading.value = false
+  }
+}
+
+/** 格式化日期时间 */
+function formatDateTime(dateStr) {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  return d.toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  })
 }
 
 // ===== 交互 =====
@@ -616,4 +836,65 @@ onMounted(() => {
 .text-success { color: #67c23a; }
 .text-warning { color: #e6a23c; }
 .text-danger  { color: #f56c6c; }
+
+// ===== IP 系统年费区域 =====
+.ip-section {
+  :deep(.el-card__header) {
+    background: #f0f9ff;
+  }
+}
+
+.ip-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ip-update-time {
+  font-size: 12px;
+  color: #909399;
+}
+
+.ip-empty-hint {
+  text-align: center;
+  padding: 24px 0;
+
+  p {
+    margin-top: 8px;
+  }
+}
+
+.ip-stat-card {
+  text-align: center;
+  padding: 12px 8px;
+  background: #fafafa;
+  border-radius: 6px;
+
+  .ip-stat-label {
+    font-size: 12px;
+    color: #909399;
+    margin-bottom: 6px;
+  }
+
+  .ip-stat-val {
+    font-size: 16px;
+    font-weight: 600;
+    color: #303133;
+  }
+}
+
+.surcharge-tip {
+  font-size: 12px;
+  font-weight: normal;
+  color: #e6a23c;
+}
+
+.ip-sub-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0 0 8px 0;
+  padding-left: 8px;
+  border-left: 3px solid #409eff;
+}
 </style>

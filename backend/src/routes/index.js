@@ -68,6 +68,8 @@ router.use('/performance', require('./performance'));
 router.use('/salary-rules', require('./salaryRules'));
 // 工资条（T-HR4）
 router.use('/payroll', require('./payroll'));
+// 专利年费查询（代理 IP 系统）
+router.use('/patent-fee', require('./patentFee'));
 
 // TODO: Phase 2 剩余
 // router.use('/wechat', require('./wechat'));
