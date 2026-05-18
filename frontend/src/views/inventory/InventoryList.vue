@@ -95,12 +95,17 @@
         <el-button type="success" @click="openBatchPriceDialog">
           <el-icon><Money /></el-icon>批量调价
         </el-button>
-        <el-button type="primary" @click="handleCreate">
-          <el-icon><Plus /></el-icon>入库
-        </el-button>
-        <el-button type="primary" plain @click="openBatchImport">
-          <el-icon><Upload /></el-icon>批量入库
-        </el-button>
+        <el-dropdown trigger="click" @command="handleCreateCommand">
+          <el-button type="primary">
+            <el-icon><Plus /></el-icon>入库<el-icon style="margin-left: 4px"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="single">单个入库</el-dropdown-item>
+              <el-dropdown-item command="batch">批量入库（Excel）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -585,7 +590,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Money, Bell, ArrowDown, Upload } from '@element-plus/icons-vue'
+import { Search, Plus, Money, Bell, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getInventoryList,
@@ -785,6 +790,15 @@ function handleCreate() {
   isEdit.value = false
   resetForm()
   dialogVisible.value = true
+}
+
+/** 入库下拉菜单命令 */
+function handleCreateCommand(command) {
+  if (command === 'single') {
+    handleCreate()
+  } else if (command === 'batch') {
+    openBatchImport()
+  }
 }
 
 function handleEdit(row) {
