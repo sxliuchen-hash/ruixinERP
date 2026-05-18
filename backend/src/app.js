@@ -20,6 +20,9 @@ const app = express();
 
 // ==================== 中间件 ====================
 
+// 信任反向代理（Nginx），使 express-rate-limit 等中间件能正确获取客户端 IP
+app.set('trust proxy', 1);
+
 // CORS
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
