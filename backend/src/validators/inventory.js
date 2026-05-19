@@ -76,8 +76,8 @@ const listInventoryQuerySchema = Joi.object({
   order: Joi.string().valid('asc', 'desc').allow('', null),
   keyword: Joi.string().max(200).allow('', null),
   page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(20),
-  pageSize: Joi.number().integer().min(1).max(100).allow(null)
+  limit: Joi.number().integer().min(1).max(100),
+  pageSize: Joi.number().integer().min(1).max(100)
 });
 
 /**
