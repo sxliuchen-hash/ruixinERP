@@ -150,6 +150,14 @@ class InventoryBatchService {
     // 映射列索引
     const colMap = this._mapColumns(headers);
 
+    // 调试日志
+    const logger = require('../utils/logger');
+    logger.info('[BatchImport] 表头检测', {
+      headerRowIndex,
+      headers: headers.filter(Boolean),
+      colMap
+    });
+
     // 解析数据行
     const valid = [];
     const errors = [];
