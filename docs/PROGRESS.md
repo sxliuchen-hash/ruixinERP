@@ -1,6 +1,6 @@
 # 内部财务管理系统 - 开发进度文档
 
-> 最后更新：2026-05-12
+> 最后更新：2026-05-19
 > 维护者：单会话接管开发
 
 ---
@@ -13,7 +13,20 @@
 | Phase 2: 企业微信集成 | 5 | 1 | 0 | 4 | █▓░░░░░░ 20% |
 | Phase 3: 专利库存+分析 | 4 | 4 | 0 | 0 | ████████ 100% ✅ |
 | Phase 4: 工具+增强 | 5 | 5 | 0 | 0 | ████████ 100% ✅ |
-| **合计** | **22** | **18** | **0** | **4** | **82%** |
+| Phase 5: 专利库存深化（IP 系统对接） | 5 | 5 | 0 | 0 | ████████ 100% ✅ |
+| **合计** | **27** | **23** | **0** | **4** | **85%** |
+
+## 🆕 Phase 5（2026-05）：专利库存与 IP 系统深度对接
+
+| # | 任务 | 后端 | 前端 | 详细文档 |
+|---|------|------|------|----------|
+| T23 | IP 系统 API 客户端 | ipSystemService + patentFeeController | 详情页 IP 数据卡片 + 同步按钮 | `ERP对接-年费查询接口说明.md` |
+| T24 | 批量入库 + 批量删除 | inventoryBatchService + batchDelete（admin） | BatchImportDialog + 勾选删除 UI | `专利库存功能扩展记录.md` |
+| T25 | 资源分类 + 利润分成 | resource_type 字段 + profit_rule JSON | 表单 + 列表 + 详情展示 | 同上 |
+| T26 | 异常告警系统 | patentAnomalyService + 周日扫描 cron + alerts 表 | PatentAnomalyAlerts 页面 + 顶部 badge | 同上 |
+| T27 | 部署/运维优化 | trust proxy + deploy.sh + 系统 Token | 侧边栏折叠 + 异常告警菜单 | `部署运维手册.md` |
+
+**模块说明**：
 
 **✅ T18 银行流水对账**：Excel 灵活列映射 + 精确/模糊匹配算法 + 三栏对比 UI + 一键创建付款。
 **✅ T19 数据导出**：通用 ExportButton 组件 + 7 个后端导出接口（payments/contracts/inventory/invoices/expenses/projects/costs）+ 6 个列表页集成导出按钮（复用当前筛选条件）。
