@@ -87,6 +87,22 @@ async function remove(req, res, next) {
   }
 }
 
+/** POST /api/v1/inventory/batch-delete - 批量删除（仅管理员） */
+async function batchDelete(req, res, next) {
+  try {
+    const { ids } = req.body;
+    const { id: userId, role: userRole } = req.user;
+    const data = await inventoryService.batchDelete(ids, userId, userRole);
+    res.json({
+      success: true,
+      message: `已删除 ${data.deleted} 条记录`,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 /** PUT /api/v1/inventory/:id/status - 变更状态（售出/放弃/转让中） */
 async function changeStatus(req, res, next) {
   try {
@@ -257,6 +273,7 @@ module.exports = {
   create,
   update,
   remove,
+  batchDelete,
   changeStatus,
   changePrice,
   batchChangePrice,

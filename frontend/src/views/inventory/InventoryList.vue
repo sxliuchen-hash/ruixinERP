@@ -95,6 +95,13 @@
         <el-button type="success" @click="openBatchPriceDialog">
           <el-icon><Money /></el-icon>批量调价
         </el-button>
+        <el-button
+          v-if="userStore.isAdmin && selectedRows.length > 0"
+          type="danger"
+          @click="handleBatchDelete"
+        >
+          <el-icon><Delete /></el-icon>批量删除 ({{ selectedRows.length }})
+        </el-button>
         <el-dropdown trigger="click" @command="handleCreateCommand">
           <el-button type="primary">
             <el-icon><Plus /></el-icon>入库<el-icon style="margin-left: 4px"><ArrowDown /></el-icon>
@@ -164,7 +171,14 @@
     </el-row>
 
     <!-- ===== 列表 ===== -->
-    <el-table :data="inventoryList" v-loading="loading" border stripe>
+    <el-table
+      :data="inventoryList"
+      v-loading="loading"
+      border
+      stripe
+      @selection-change="handleSelectionChange"
+    >
+      <el-table-column v-if="userStore.isAdmin" type="selection" width="50" fixed="left" />
       <el-table-column prop="patent_no" label="专利号" width="150" fixed="left" />
       <el-table-column prop="patent_name" label="名称" min-width="200" show-overflow-tooltip />
       <el-table-column prop="patent_type" label="类型" width="100" align="center">
@@ -590,7 +604,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Money, Bell, ArrowDown } from '@element-plus/icons-vue'
+import { Search, Plus, Money, Bell, ArrowDown, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getInventoryList,
@@ -599,22 +613,26 @@ import {
   createInventory,
   updateInventory,
   deleteInventory,
+  batchDeleteInventory,
   changeInventoryStatus,
   changeInventoryPrice,
   batchChangePrice
 } from '@/api/inventory'
 import { formatMoney, formatDate } from '@/utils/format'
 import { INVENTORY_STATUS_MAP } from '@/utils/constants'
+import { useUserStore } from '@/stores/user'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ContractSelect from '@/components/business/ContractSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
 import BatchImportDialog from './BatchImportDialog.vue'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 // ===== 列表状态 =====
 const loading = ref(false)
 const inventoryList = ref([])
+const selectedRows = ref([])
 const searchKeyword = ref('')
 const filterStatus = ref('')
 const filterTechField = ref('')
@@ -867,6 +885,44 @@ async function handleDelete(row) {
     fetchOverview()
   } catch (e) {
     // 用户取消
+  }
+}
+
+/** 表格多选变化 */
+function handleSelectionChange(rows) {
+  selectedRows.value = rows
+}
+
+/** 批量删除（仅管理员） */
+async function handleBatchDelete() {
+  if (selectedRows.value.length === 0) return
+
+  const ids = selectedRows.value.map(r => r.id)
+  const patentNos = selectedRows.value.map(r => r.patent_no).slice(0, 5).join('、')
+  const more = selectedRows.value.length > 5 ? `等 ${selectedRows.value.length} 条` : ''
+
+  try {
+    await ElMessageBox.confirm(
+      `将批量删除：${patentNos}${more}\n\n此操作会同时删除所有年费记录和调价历史，且不可撤销。确定继续？`,
+      '危险操作确认',
+      {
+        type: 'error',
+        confirmButtonText: '确认删除',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+  } catch (e) {
+    return // 用户取消
+  }
+
+  try {
+    const res = await batchDeleteInventory(ids)
+    ElMessage.success(`已删除 ${res.data?.deleted || 0} 条记录`)
+    selectedRows.value = []
+    fetchList()
+    fetchOverview()
+  } catch (e) {
+    // 全局拦截器已提示
   }
 }
 

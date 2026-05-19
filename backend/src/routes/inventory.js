@@ -29,7 +29,7 @@ const router = express.Router();
 const multer = require('multer');
 const inventoryController = require('../controllers/inventoryController');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess, attachDataFilter } = require('../middlewares/permission');
+const { requireErpAccess, requireAdmin, attachDataFilter } = require('../middlewares/permission');
 const { operationLog } = require('../middlewares/operationLog');
 const validate = require('../middlewares/validate');
 const {
@@ -81,6 +81,13 @@ router.post('/batch-import/validate',
 router.post('/batch-import/execute',
   operationLog('create', 'patent_inventory'),
   inventoryController.batchImportExecute
+);
+
+// ===== 批量删除（仅管理员） =====
+router.post('/batch-delete',
+  requireAdmin(),
+  operationLog('delete', 'patent_inventory'),
+  inventoryController.batchDelete
 );
 
 // ===== 列表 / 入库 =====

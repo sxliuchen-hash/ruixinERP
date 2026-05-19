@@ -264,6 +264,69 @@ class InventoryService {
   }
 
   /**
+   * 批量删除库存记录（级联删除年费和调价历史）
+   * 仅管理员可调用
+   *
+   * @param {number[]} ids - 要删除的库存 ID 数组
+   * @param {number} userId
+   * @param {string} userRole - 必须是 admin
+   * @returns {Promise<{deleted: number, failed: Array}>}
+   */
+  async batchDelete(ids, userId, userRole) {
+    if (userRole !== 'admin') {
+      throw new ValidationError('仅管理员可执行批量删除');
+    }
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new ValidationError('请选择要删除的记录');
+    }
+
+    if (ids.length > 500) {
+      throw new ValidationError('单次最多删除 500 条');
+    }
+
+    const idList = ids.map(i => parseInt(i, 10)).filter(i => !isNaN(i));
+    if (idList.length === 0) {
+      throw new ValidationError('ID 列表非法');
+    }
+
+    // 查询实际存在的记录
+    const existing = await PatentInventory.findAll({
+      where: { id: { [Op.in]: idList } },
+      attributes: ['id', 'patent_no']
+    });
+
+    if (existing.length === 0) {
+      return { deleted: 0, failed: [], notFound: idList };
+    }
+
+    const existingIds = existing.map(e => e.id);
+    const notFound = idList.filter(id => !existingIds.includes(id));
+
+    // 事务内级联删除
+    await sequelize.transaction(async (t) => {
+      await PatentAnnualFee.destroy({
+        where: { inventory_id: { [Op.in]: existingIds } },
+        transaction: t
+      });
+      await PatentPriceHistory.destroy({
+        where: { inventory_id: { [Op.in]: existingIds } },
+        transaction: t
+      });
+      await PatentInventory.destroy({
+        where: { id: { [Op.in]: existingIds } },
+        transaction: t
+      });
+    });
+
+    return {
+      deleted: existing.length,
+      deletedItems: existing.map(e => ({ id: e.id, patent_no: e.patent_no })),
+      notFound
+    };
+  }
+
+  /**
    * 删除库存记录（级联删除年费和调价历史）
    *
    * 注意：若存在关联的 Payment / Project 等，删除会留下悬空外键，

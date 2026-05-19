@@ -40,6 +40,14 @@ export function deleteInventory(id) {
 }
 
 /**
+ * 批量删除（仅管理员）
+ * @param {number[]} ids - 要删除的库存 ID 数组
+ */
+export function batchDeleteInventory(ids) {
+  return request.post('/inventory/batch-delete', { ids })
+}
+
+/**
  * 变更状态（in_stock / sold / abandoned / transferring）
  * @param {number} id
  * @param {{status, stock_out_date?}} data
