@@ -306,13 +306,39 @@ async function resolveAnomaly(req, res, next) {
 async function triggerAnomalyScan(req, res, next) {
   try {
     const job = require('../jobs/patentBatchQueryJob');
-    // 异步执行，立即返回
+
+    // 检查是否已在运行
+    const current = await job.getProgress();
+    if (current && current.status === 'running') {
+      return res.json({
+        success: false,
+        message: '扫描任务正在运行中，请等待完成',
+        data: current
+      });
+    }
+
+    // 异步执行
     job.run().catch(e => {
       require('../utils/logger').error('手动触发扫描失败:', e);
     });
+
     res.json({
       success: true,
-      message: '扫描任务已启动，请稍后查看告警列表'
+      message: '扫描任务已启动'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** GET /api/v1/inventory/anomalies/scan-progress - 获取扫描进度 */
+async function getScanProgress(req, res, next) {
+  try {
+    const job = require('../jobs/patentBatchQueryJob');
+    const progress = await job.getProgress();
+    res.json({
+      success: true,
+      data: progress || { status: 'idle', total: 0, scanned: 0, failed: 0, alerts: 0, logs: [] }
     });
   } catch (error) {
     next(error);
@@ -340,5 +366,6 @@ module.exports = {
   getAnomalies,
   getAnomalyOverview,
   resolveAnomaly,
-  triggerAnomalyScan
+  triggerAnomalyScan,
+  getScanProgress
 };

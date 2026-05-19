@@ -685,6 +685,9 @@
 
     <!-- ===== 批量入库弹窗 ===== -->
     <BatchImportDialog ref="batchImportRef" @success="handleBatchImportSuccess" />
+
+    <!-- ===== 批量扫描进度弹窗 ===== -->
+    <ScanProgressDialog ref="scanProgressRef" @done="handleScanDone" />
   </div>
 </template>
 
@@ -704,8 +707,7 @@ import {
   changeInventoryStatus,
   changeInventoryPrice,
   batchChangePrice,
-  getAnomalyOverview,
-  triggerAnomalyScan
+  getAnomalyOverview
 } from '@/api/inventory'
 import { formatMoney, formatDate } from '@/utils/format'
 import { INVENTORY_STATUS_MAP, RESOURCE_TYPE_MAP } from '@/utils/constants'
@@ -714,6 +716,7 @@ import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ContractSelect from '@/components/business/ContractSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
 import BatchImportDialog from './BatchImportDialog.vue'
+import ScanProgressDialog from './ScanProgressDialog.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -832,6 +835,7 @@ const batchImportRef = ref(null)
 
 // ===== 批量更新全量信息 =====
 const batchSyncLoading = ref(false)
+const scanProgressRef = ref(null)
 
 // ===== 数据拉取 =====
 
@@ -1227,27 +1231,16 @@ function handleBatchImportSuccess() {
   fetchOverview()
 }
 
-/** 批量更新全量信息（触发 IP 系统扫描） */
+/** 批量更新全量信息（打开进度弹窗） */
 async function handleBatchSync() {
-  try {
-    await ElMessageBox.confirm(
-      '将对所有在库专利调用 IP 系统获取最新全量信息（年费、法律状态、变更等），耗时较长。确定继续？',
-      '批量更新全量信息',
-      { type: 'warning', confirmButtonText: '开始更新' }
-    )
-  } catch (e) {
-    return
-  }
+  scanProgressRef.value?.open()
+}
 
-  batchSyncLoading.value = true
-  try {
-    await triggerAnomalyScan()
-    ElMessage.success('批量更新任务已启动，后台运行中，完成后可在异常告警中查看结果')
-  } catch (e) {
-    // 拦截器已提示
-  } finally {
-    batchSyncLoading.value = false
-  }
+/** 扫描完成回调 */
+function handleScanDone() {
+  fetchList()
+  fetchOverview()
+  fetchAnomalyCount()
 }
 
 /**

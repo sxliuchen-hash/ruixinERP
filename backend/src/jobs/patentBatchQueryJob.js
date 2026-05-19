@@ -3,29 +3,18 @@
  * 在库专利全量信息批量查询定时任务
  * ============================================================
  *
- * 【触发时间】每周日 06:00（避开工作时间）
+ * 【触发时间】每周日 06:00 / 管理员手动触发
  *
- * 【业务流程】
- *   1) 查询所有 status='in_stock' 的专利
- *   2) 逐个调用 IP 系统 patent-fee/detail 接口
- *   3) 调用异常检测服务，发现异常即写入 patent_anomaly_alerts 表
- *   4) 同步基础信息（patent_name/type/next_fee_deadline）到本地
- *
- * 【认证策略】
- *   定时任务无 HTTP 上下文，无法直接复用用户 JWT。
- *   方案：使用专用的"系统 Token"——在数据库中预设一个 admin 账号，
- *   定时任务启动时通过 jwt.sign 直接签发短期 Token 调用 IP 系统。
- *
- * 【限流】
- *   每次请求间隔 800ms，避免触发 IP 系统频率限制
- *
- * 【容错】
- *   单个专利失败不阻断整体；记录失败次数，连续失败 > 3 个则暂停 60s
+ * 【进度追踪】
+ *   通过 Redis 存储实时进度，前端轮询 /api/v1/inventory/anomalies/scan-progress 获取
+ *   Redis key: erp:patent_scan_progress
+ *   结构: { status, total, scanned, failed, alerts, logs[], startedAt, finishedAt }
  * ============================================================
  */
 
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const redis = require('../config/redis');
 const PatentInventory = require('../models/PatentInventory');
 const patentAnomalyService = require('../services/patentAnomalyService');
 const logger = require('../utils/logger');
@@ -34,27 +23,21 @@ const REQUEST_INTERVAL_MS = 800;
 const FAILURE_PAUSE_MS = 60000;
 const MAX_CONSECUTIVE_FAILURES = 3;
 const IP_API_BASE = process.env.IP_API_BASE_URL || 'https://iptt.top/api/v1';
+const PROGRESS_KEY = 'patent_scan_progress';
+const PROGRESS_TTL = 3600; // 1 小时后自动过期
 
-/**
- * 生成系统级 Token（用于定时任务调用 IP 系统）
- *
- * 由于 ERP 与 IP 系统共用 JWT_SECRET，使用一个虚构的 admin payload 即可。
- * 实际生产建议在主项目数据库中预设一个 system 角色账号。
- */
+// 内存备份（Redis 不可用时使用）
+let memoryProgress = null;
+
 function generateSystemToken() {
-  // 使用环境变量中的系统账号，或退回到默认 admin
   const systemUser = {
     id: parseInt(process.env.IP_SYSTEM_USER_ID, 10) || 1,
     username: process.env.IP_SYSTEM_USERNAME || 'system',
     role: 'admin'
   };
-
   return jwt.sign(systemUser, process.env.JWT_SECRET, { expiresIn: '2h' });
 }
 
-/**
- * 调用 IP 系统获取单个专利详情
- */
 async function fetchIpPatentDetail(patentNo, token) {
   const response = await axios.get(
     `${IP_API_BASE}/patent-fee/detail/${encodeURIComponent(patentNo)}`,
@@ -63,7 +46,6 @@ async function fetchIpPatentDetail(patentNo, token) {
       timeout: 15000
     }
   );
-
   if (response.data?.code === 200) {
     return response.data.data;
   }
@@ -75,11 +57,66 @@ function sleep(ms) {
 }
 
 /**
+ * 更新进度到 Redis（带内存备份）
+ */
+async function updateProgress(data) {
+  memoryProgress = data;
+  try {
+    await redis.set(PROGRESS_KEY, JSON.stringify(data), 'EX', PROGRESS_TTL);
+  } catch (e) {
+    // Redis 不可用时使用内存备份
+  }
+}
+
+/**
+ * 追加日志到进度
+ */
+async function appendLog(progress, message, level = 'info') {
+  const logEntry = {
+    time: new Date().toLocaleTimeString('zh-CN'),
+    level,
+    message
+  };
+  progress.logs.push(logEntry);
+  // 只保留最近 200 条日志
+  if (progress.logs.length > 200) {
+    progress.logs = progress.logs.slice(-200);
+  }
+  await updateProgress(progress);
+}
+
+/**
+ * 获取当前进度
+ */
+async function getProgress() {
+  try {
+    const data = await redis.get(PROGRESS_KEY);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    // Redis 不可用
+  }
+  return memoryProgress;
+}
+
+/**
  * 执行批量扫描
  */
 async function run() {
   const startTs = Date.now();
   logger.info('[PatentBatchQueryJob] 开始扫描在库专利全量信息');
+
+  // 初始化进度
+  const progress = {
+    status: 'running',
+    total: 0,
+    scanned: 0,
+    failed: 0,
+    alerts: 0,
+    synced: 0,
+    logs: [],
+    startedAt: new Date().toISOString(),
+    finishedAt: null
+  };
 
   // 1. 拉取在库专利
   const inventories = await PatentInventory.findAll({
@@ -88,30 +125,33 @@ async function run() {
   });
 
   if (inventories.length === 0) {
+    progress.status = 'completed';
+    progress.finishedAt = new Date().toISOString();
+    await appendLog(progress, '无在库专利，扫描结束');
     logger.info('[PatentBatchQueryJob] 无在库专利，跳过');
     return { scanned: 0, alerts: 0, failed: 0 };
   }
 
-  logger.info(`[PatentBatchQueryJob] 待扫描专利数：${inventories.length}`);
+  progress.total = inventories.length;
+  await appendLog(progress, `开始扫描，共 ${inventories.length} 条在库专利`);
 
   // 2. 生成系统 Token
   const token = generateSystemToken();
 
-  let scanned = 0;
-  let alertsTotal = 0;
-  let failed = 0;
   let consecutiveFailures = 0;
 
-  for (const inv of inventories) {
+  for (let i = 0; i < inventories.length; i++) {
+    const inv = inventories[i];
+
     try {
       // 拉取 IP 系统数据
       const ipData = await fetchIpPatentDetail(inv.patent_no, token);
 
       // 异常检测
       const newAlerts = await patentAnomalyService.detectAndRecord(inv, ipData);
-      alertsTotal += newAlerts.length;
+      progress.alerts += newAlerts.length;
 
-      // 同步基础信息（仅在本地为空时更新）
+      // 同步基础信息
       const updates = {};
       if (ipData.patent?.patentName && (!inv.patent_name || inv.patent_name === inv.patent_no)) {
         updates.patent_name = ipData.patent.patentName;
@@ -124,21 +164,27 @@ async function run() {
       }
       if (Object.keys(updates).length > 0) {
         await PatentInventory.update(updates, { where: { id: inv.id } });
+        progress.synced++;
       }
 
-      scanned++;
+      progress.scanned++;
       consecutiveFailures = 0;
 
-      if (newAlerts.length > 0) {
-        logger.warn(`[PatentBatchQueryJob] ${inv.patent_no} 发现 ${newAlerts.length} 个异常`);
-      }
+      // 日志
+      const logMsg = newAlerts.length > 0
+        ? `[${i + 1}/${inventories.length}] ${inv.patent_no} ⚠ 发现 ${newAlerts.length} 个异常`
+        : `[${i + 1}/${inventories.length}] ${inv.patent_no} ✓`;
+      await appendLog(progress, logMsg, newAlerts.length > 0 ? 'warning' : 'info');
+
     } catch (e) {
-      failed++;
+      progress.failed++;
       consecutiveFailures++;
+
+      await appendLog(progress, `[${i + 1}/${inventories.length}] ${inv.patent_no} ✗ ${e.message}`, 'error');
       logger.warn(`[PatentBatchQueryJob] ${inv.patent_no} 查询失败: ${e.message}`);
 
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        logger.warn(`[PatentBatchQueryJob] 连续失败 ${consecutiveFailures} 次，暂停 ${FAILURE_PAUSE_MS}ms`);
+        await appendLog(progress, `连续失败 ${consecutiveFailures} 次，暂停 60 秒...`, 'warning');
         await sleep(FAILURE_PAUSE_MS);
         consecutiveFailures = 0;
       }
@@ -148,15 +194,21 @@ async function run() {
     await sleep(REQUEST_INTERVAL_MS);
   }
 
+  // 完成
   const cost = Date.now() - startTs;
+  progress.status = 'completed';
+  progress.finishedAt = new Date().toISOString();
+  await appendLog(progress, `扫描完成！成功 ${progress.scanned} 条，失败 ${progress.failed} 条，发现异常 ${progress.alerts} 个，同步信息 ${progress.synced} 条，耗时 ${Math.round(cost / 1000)} 秒`);
+
   logger.info('[PatentBatchQueryJob] 扫描完成', {
-    scanned,
-    alerts: alertsTotal,
-    failed,
+    scanned: progress.scanned,
+    alerts: progress.alerts,
+    failed: progress.failed,
+    synced: progress.synced,
     cost_ms: cost
   });
 
-  return { scanned, alerts: alertsTotal, failed, cost_ms: cost };
+  return { scanned: progress.scanned, alerts: progress.alerts, failed: progress.failed, cost_ms: cost };
 }
 
-module.exports = { run };
+module.exports = { run, getProgress };

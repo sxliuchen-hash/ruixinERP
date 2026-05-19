@@ -138,6 +138,11 @@ export function triggerAnomalyScan() {
   return request.post('/inventory/anomalies/scan')
 }
 
+/** 获取扫描进度 */
+export function getScanProgress() {
+  return request.get('/inventory/anomalies/scan-progress')
+}
+
 // ============ 聚合接口 ============
 
 /** 库存总览统计 */
