@@ -34,31 +34,81 @@ class InventoryBatchService {
    */
   async generateTemplate() {
     const columns = [
-      { header: '专利号（必填）', key: 'patent_no', width: 22 },
+      { header: '专利号*（必填）', key: 'patent_no', width: 22 },
+      { header: '专利名称（留空自动从IP系统获取）', key: 'patent_name', width: 32 },
+      { header: '专利类型（发明/实用新型/外观，留空自动获取）', key: 'patent_type', width: 28 },
+      { header: '技术领域', key: 'tech_field', width: 16 },
+      { header: '资源类型（自有/独家代理/共同代理）', key: 'resource_type', width: 22 },
+      { header: '代理商名称（代理类型时填写）', key: 'agent_name', width: 22 },
+      { header: '分成方式（百分比/固定）', key: 'profit_mode', width: 18 },
+      { header: '分成数值（百分比0-100或固定金额）', key: 'profit_value', width: 24 },
       { header: '采购价', key: 'purchase_price', width: 12 },
-      { header: '定价（售价）', key: 'current_price', width: 12 },
-      { header: '供应商名称', key: 'supplier_name', width: 24 },
-      { header: '采购日期', key: 'purchase_date', width: 14 },
-      { header: '是否报过高企（是/否）', key: 'reported_high_tech', width: 20 },
+      { header: '定价（售价）', key: 'current_price', width: 14 },
+      { header: '供应商名称', key: 'supplier_name', width: 22 },
+      { header: '采购日期（YYYY-MM-DD）', key: 'purchase_date', width: 18 },
+      { header: '入库日期（默认今日）', key: 'stock_in_date', width: 18 },
+      { header: '报过高企（是/否）', key: 'reported_high_tech', width: 16 },
       { header: '备注', key: 'remark', width: 30 }
     ];
 
-    // 示例数据
+    // 三条示例数据：自有 / 独家代理（百分比）/ 共同代理（固定）
     const rows = [
       {
         patent_no: '2020107848060',
+        patent_name: '',
+        patent_type: '',
+        tech_field: '通信',
+        resource_type: '自有',
+        agent_name: '',
+        profit_mode: '',
+        profit_value: '',
         purchase_price: 5000,
         current_price: 12000,
         supplier_name: '示例供应商',
         purchase_date: '2025-01-15',
+        stock_in_date: '',
         reported_high_tech: '否',
-        remark: '示例数据，请删除后填写'
+        remark: '示例：自有专利（专利名称留空将自动从IP系统获取）'
+      },
+      {
+        patent_no: '2021100000001',
+        patent_name: '',
+        patent_type: '',
+        tech_field: '人工智能',
+        resource_type: '独家代理',
+        agent_name: '示例代理商A',
+        profit_mode: '百分比',
+        profit_value: 30,
+        purchase_price: 0,
+        current_price: 20000,
+        supplier_name: '',
+        purchase_date: '',
+        stock_in_date: '',
+        reported_high_tech: '否',
+        remark: '示例：独家代理，代理商分30%'
+      },
+      {
+        patent_no: '2022200000002',
+        patent_name: '',
+        patent_type: '',
+        tech_field: '新材料',
+        resource_type: '共同代理',
+        agent_name: '示例代理商B',
+        profit_mode: '固定',
+        profit_value: 5000,
+        purchase_price: 0,
+        current_price: 18000,
+        supplier_name: '',
+        purchase_date: '',
+        stock_in_date: '',
+        reported_high_tech: '是',
+        remark: '示例：共同代理，代理商固定收5000'
       }
     ];
 
     const buffer = await buildExcel({
       sheetName: '批量入库模板',
-      title: '专利库存批量入库模板',
+      title: '专利库存批量入库模板（仅"专利号"为必填，其他字段可留空）',
       columns,
       rows
     });
@@ -119,15 +169,30 @@ class InventoryBatchService {
       if (!patentNoRaw) continue;
 
       total++;
+      const patentNameRaw = this._getCellValue(row, colMap.patent_name);
+      const patentTypeRaw = this._getCellValue(row, colMap.patent_type);
+      const techFieldRaw = this._getCellValue(row, colMap.tech_field);
+      const resourceTypeRaw = this._getCellValue(row, colMap.resource_type);
+      const agentNameRaw = this._getCellValue(row, colMap.agent_name);
+      const profitModeRaw = this._getCellValue(row, colMap.profit_mode);
+      const profitValueRaw = this._getCellValue(row, colMap.profit_value);
+
       const rowData = {
         rowIndex: i,
         patent_no: String(patentNoRaw).trim().replace(/\s/g, ''),
+        patent_name: patentNameRaw ? String(patentNameRaw).trim() : '',
+        patent_type: patentTypeRaw ? String(patentTypeRaw).trim() : '',
+        tech_field: techFieldRaw ? String(techFieldRaw).trim() : '',
+        resource_type: this._parseResourceType(resourceTypeRaw),
+        agent_name: agentNameRaw ? String(agentNameRaw).trim() : '',
+        profit_rule: this._parseProfitRule(profitModeRaw, profitValueRaw),
         purchase_price: this._parseNumber(this._getCellValue(row, colMap.purchase_price)),
         current_price: this._parseNumber(this._getCellValue(row, colMap.current_price)),
         supplier_name: this._getCellValue(row, colMap.supplier_name)
           ? String(this._getCellValue(row, colMap.supplier_name)).trim()
           : '',
         purchase_date: this._parseDate(this._getCellValue(row, colMap.purchase_date)),
+        stock_in_date: this._parseDate(this._getCellValue(row, colMap.stock_in_date)),
         reported_high_tech: this._parseBoolean(this._getCellValue(row, colMap.reported_high_tech)),
         remark: this._getCellValue(row, colMap.remark)
           ? String(this._getCellValue(row, colMap.remark)).trim()
@@ -147,6 +212,16 @@ class InventoryBatchService {
       // 重复检查
       if (rowData.patent_no && existingSet.has(rowData.patent_no)) {
         rowErrors.push(`专利号 ${rowData.patent_no} 已存在于库存中`);
+      }
+
+      // 资源类型与代理商一致性校验
+      if (rowData.resource_type !== 'own') {
+        if (!rowData.agent_name) {
+          rowErrors.push('代理类型必须填写代理商名称');
+        }
+        if (!rowData.profit_rule) {
+          rowErrors.push('代理类型必须填写分成方式和数值');
+        }
       }
 
       // 供应商匹配
@@ -169,9 +244,30 @@ class InventoryBatchService {
         }
       }
 
+      // 代理商匹配（共用 suppliers 表）
+      if (rowData.agent_name) {
+        const agentId = supplierMap.get(rowData.agent_name);
+        if (agentId) {
+          rowData.agent_id = agentId;
+        } else {
+          const fuzzyMatch = [...supplierMap.entries()].find(
+            ([name]) => name.includes(rowData.agent_name) || rowData.agent_name.includes(name)
+          );
+          if (fuzzyMatch) {
+            rowData.agent_id = fuzzyMatch[1];
+            rowData.agent_name_matched = fuzzyMatch[0];
+          } else {
+            rowData.agent_id = null;
+            rowErrors.push(`代理商"${rowData.agent_name}"未找到，入库后需手动关联`);
+          }
+        }
+      }
+
       if (rowErrors.length > 0) {
-        // 供应商未找到只是警告，不阻断
-        const blocking = rowErrors.filter(e => !e.includes('供应商'));
+        // 供应商/代理商未找到只是警告，不阻断
+        const blocking = rowErrors.filter(e =>
+          !e.includes('供应商') && !e.includes('代理商')
+        );
         if (blocking.length > 0) {
           errors.push({ ...rowData, errors: rowErrors });
         } else {
@@ -221,34 +317,45 @@ class InventoryBatchService {
           continue;
         }
 
-        // 尝试从 IP 系统获取专利详情
-        let patentName = row.patent_no; // 默认用专利号作为名称
-        let patentType = null;
+        // 优先使用用户填写的，否则尝试从 IP 系统获取
+        let patentName = row.patent_name || '';
+        let patentType = row.patent_type || null;
         let ipFetched = false;
 
-        try {
-          const ipData = await ipSystemService.getPatentFeeDetail(row.patent_no, req);
-          if (ipData && ipData.patent) {
-            patentName = ipData.patent.patentName || patentName;
-            patentType = ipData.patent.patentType || null;
-            ipFetched = true;
+        const needIpFetch = !patentName || !patentType;
+        if (needIpFetch) {
+          try {
+            const ipData = await ipSystemService.getPatentFeeDetail(row.patent_no, req);
+            if (ipData && ipData.patent) {
+              if (!patentName) patentName = ipData.patent.patentName || row.patent_no;
+              if (!patentType) patentType = ipData.patent.patentType || null;
+              ipFetched = true;
+            }
+          } catch (ipErr) {
+            // IP 系统查询失败不阻断入库
+            logger.warn(`批量入库: IP 系统查询 ${row.patent_no} 失败: ${ipErr.message}`);
           }
-        } catch (ipErr) {
-          // IP 系统查询失败不阻断入库
-          logger.warn(`批量入库: IP 系统查询 ${row.patent_no} 失败: ${ipErr.message}`);
         }
 
-        // 入库
-        const today = new Date().toISOString().slice(0, 10);
+        // 兜底：若 patentName 仍为空，用专利号
+        if (!patentName) patentName = row.patent_no;
+
+        // 入库日期：用户填写优先，否则取今日
+        const stockInDate = row.stock_in_date || new Date().toISOString().slice(0, 10);
+
         await PatentInventory.create({
           patent_no: row.patent_no,
           patent_name: patentName,
           patent_type: patentType,
+          tech_field: row.tech_field || null,
+          resource_type: row.resource_type || 'own',
+          agent_id: row.agent_id || null,
+          profit_rule: row.profit_rule || null,
           purchase_price: row.purchase_price || 0,
           current_price: row.current_price || 0,
           purchase_date: row.purchase_date || null,
           supplier_id: row.supplier_id || null,
-          stock_in_date: today,
+          stock_in_date: stockInDate,
           status: 'in_stock',
           total_maintain_cost: 0,
           reported_high_tech: row.reported_high_tech || false,
@@ -262,11 +369,13 @@ class InventoryBatchService {
           patent_name: patentName,
           status: 'imported',
           ip_fetched: ipFetched,
-          message: ipFetched ? '入库成功（已获取专利信息）' : '入库成功（专利信息待补全）'
+          message: ipFetched
+            ? '入库成功（IP 系统补全信息）'
+            : (needIpFetch ? '入库成功（IP 信息待补全）' : '入库成功')
         });
 
-        // IP 系统频率限制：间隔 600ms
-        if (validRows.indexOf(row) < validRows.length - 1) {
+        // IP 系统频率限制：仅在调用了 IP 系统时才需要等待
+        if (needIpFetch && validRows.indexOf(row) < validRows.length - 1) {
           await this._sleep(600);
         }
       } catch (err) {
@@ -291,10 +400,18 @@ class InventoryBatchService {
   _mapColumns(headers) {
     const map = {
       patent_no: null,
+      patent_name: null,
+      patent_type: null,
+      tech_field: null,
+      resource_type: null,
+      agent_name: null,
+      profit_mode: null,
+      profit_value: null,
       purchase_price: null,
       current_price: null,
       supplier_name: null,
       purchase_date: null,
+      stock_in_date: null,
       reported_high_tech: null,
       remark: null
     };
@@ -303,15 +420,53 @@ class InventoryBatchService {
       if (!h) return;
       const lower = h.toLowerCase();
       if (lower.includes('专利号')) map.patent_no = idx;
+      else if (lower.includes('专利名称') || lower.includes('名称')) map.patent_name = idx;
+      else if (lower.includes('专利类型') || lower.includes('类型')) map.patent_type = idx;
+      else if (lower.includes('技术领域') || lower.includes('领域')) map.tech_field = idx;
+      else if (lower.includes('资源类型') || lower.includes('资源分类')) map.resource_type = idx;
+      else if (lower.includes('代理商')) map.agent_name = idx;
+      else if (lower.includes('分成方式')) map.profit_mode = idx;
+      else if (lower.includes('分成数值') || lower.includes('分成比例') || lower.includes('分成金额')) map.profit_value = idx;
       else if (lower.includes('采购价') || lower.includes('成本')) map.purchase_price = idx;
       else if (lower.includes('定价') || lower.includes('售价') || lower.includes('现价')) map.current_price = idx;
       else if (lower.includes('供应商')) map.supplier_name = idx;
       else if (lower.includes('采购日') || lower.includes('采购时间')) map.purchase_date = idx;
+      else if (lower.includes('入库日') || lower.includes('入库时间')) map.stock_in_date = idx;
       else if (lower.includes('高企') || lower.includes('高新')) map.reported_high_tech = idx;
       else if (lower.includes('备注')) map.remark = idx;
     });
 
     return map;
+  }
+
+  /**
+   * 解析资源类型（中英文映射）
+   */
+  _parseResourceType(val) {
+    if (!val) return 'own';
+    const str = String(val).trim();
+    if (str === '自有' || str === 'own') return 'own';
+    if (str === '独家代理' || str === 'exclusive_agent') return 'exclusive_agent';
+    if (str === '共同代理' || str === 'joint_agent') return 'joint_agent';
+    return 'own'; // 默认自有
+  }
+
+  /**
+   * 解析分成规则
+   */
+  _parseProfitRule(modeVal, valueVal) {
+    if (!modeVal) return null;
+    const mode = String(modeVal).trim();
+    const value = parseFloat(valueVal);
+    if (isNaN(value) || value < 0) return null;
+
+    if (mode === '百分比' || mode === 'percent') {
+      return { mode: 'percent', agent_share_pct: Math.min(100, value) };
+    }
+    if (mode === '固定' || mode === 'fixed') {
+      return { mode: 'fixed', agent_fixed_fee: value };
+    }
+    return null;
   }
 
   _getCellValue(row, colIndex) {

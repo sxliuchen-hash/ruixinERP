@@ -28,8 +28,18 @@
       <el-alert type="info" :closable="false" style="margin-bottom: 16px">
         <template #title>
           <div>
-            <p style="margin: 0 0 8px 0">请按模板格式填写 Excel 后上传。必填字段：<strong>专利号</strong>。</p>
-            <p style="margin: 0">专利名称、类型等详情信息将自动从 IP 系统获取，无需手动填写。</p>
+            <p style="margin: 0 0 8px 0">
+              请按模板格式填写 Excel 后上传。<strong>仅"专利号"为必填</strong>，其他字段可留空。
+            </p>
+            <p style="margin: 0 0 4px 0">
+              · 专利名称、类型留空时，会自动从 IP 系统获取
+            </p>
+            <p style="margin: 0 0 4px 0">
+              · 资源类型支持：自有 / 独家代理 / 共同代理（默认自有）
+            </p>
+            <p style="margin: 0">
+              · 代理类型必须填写代理商名称、分成方式（百分比/固定）和分成数值
+            </p>
           </div>
         </template>
       </el-alert>
@@ -97,25 +107,53 @@
       <!-- 校验通过列表 -->
       <el-tabs v-model="previewTab">
         <el-tab-pane :label="`通过 (${validateResult.validCount})`" name="valid">
-          <el-table :data="validateResult.valid" border stripe size="small" max-height="320">
-            <el-table-column prop="patent_no" label="专利号" width="150" />
-            <el-table-column prop="purchase_price" label="采购价" width="100" align="right">
+          <el-table :data="validateResult.valid" border stripe size="small" max-height="400">
+            <el-table-column prop="patent_no" label="专利号" width="140" />
+            <el-table-column prop="patent_name" label="名称" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.patent_name">{{ row.patent_name }}</span>
+                <span v-else style="color: #909399">（IP 系统补全）</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="资源类型" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag size="small" :type="resourceTypeTag(row.resource_type)">
+                  {{ resourceTypeLabel(row.resource_type) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="agent_name" label="代理商" width="120" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.agent_name">{{ row.agent_name }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="分成" width="100" align="center">
+              <template #default="{ row }">
+                <span v-if="row.profit_rule">
+                  {{ row.profit_rule.mode === 'percent'
+                      ? row.profit_rule.agent_share_pct + '%'
+                      : '¥' + row.profit_rule.agent_fixed_fee }}
+                </span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="purchase_price" label="采购价" width="90" align="right">
               <template #default="{ row }">{{ row.purchase_price || 0 }}</template>
             </el-table-column>
-            <el-table-column prop="current_price" label="定价" width="100" align="right">
+            <el-table-column prop="current_price" label="定价" width="90" align="right">
               <template #default="{ row }">{{ row.current_price || 0 }}</template>
             </el-table-column>
-            <el-table-column prop="supplier_name" label="供应商" width="140" show-overflow-tooltip />
-            <el-table-column prop="purchase_date" label="采购日期" width="110" align="center" />
-            <el-table-column label="报过高企" width="90" align="center">
+            <el-table-column prop="supplier_name" label="供应商" width="120" show-overflow-tooltip />
+            <el-table-column prop="purchase_date" label="采购日" width="100" align="center" />
+            <el-table-column label="高企" width="60" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.reported_high_tech ? 'success' : 'info'" size="small">
                   {{ row.reported_high_tech ? '是' : '否' }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-            <el-table-column label="警告" min-width="140" show-overflow-tooltip>
+            <el-table-column label="警告" min-width="160" show-overflow-tooltip>
               <template #default="{ row }">
                 <span v-if="row.warnings?.length" class="text-warning">
                   {{ row.warnings.join('; ') }}
@@ -305,6 +343,17 @@ function handleFinish() {
   if (importResult.value.imported > 0) {
     emit('success')
   }
+}
+
+/** 资源类型显示 */
+function resourceTypeLabel(type) {
+  const map = { own: '自有', exclusive_agent: '独家代理', joint_agent: '共同代理' }
+  return map[type] || '自有'
+}
+
+function resourceTypeTag(type) {
+  const map = { own: 'success', exclusive_agent: 'warning', joint_agent: 'info' }
+  return map[type] || ''
 }
 
 defineExpose({ open })
