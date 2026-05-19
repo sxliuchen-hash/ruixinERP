@@ -106,6 +106,15 @@
             <el-icon><Warning /></el-icon>异常告警
           </el-button>
         </el-badge>
+        <el-button
+          v-if="userStore.isAdmin"
+          type="primary"
+          plain
+          :loading="batchSyncLoading"
+          @click="handleBatchSync"
+        >
+          <el-icon><Refresh /></el-icon>批量更新全量信息
+        </el-button>
         <ExportButton
           path="/export/inventory"
           :params="exportParams"
@@ -682,7 +691,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Money, Bell, ArrowDown, Delete, Warning } from '@element-plus/icons-vue'
+import { Search, Plus, Money, Bell, ArrowDown, Delete, Warning, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getInventoryList,
@@ -695,7 +704,8 @@ import {
   changeInventoryStatus,
   changeInventoryPrice,
   batchChangePrice,
-  getAnomalyOverview
+  getAnomalyOverview,
+  triggerAnomalyScan
 } from '@/api/inventory'
 import { formatMoney, formatDate } from '@/utils/format'
 import { INVENTORY_STATUS_MAP, RESOURCE_TYPE_MAP } from '@/utils/constants'
@@ -819,6 +829,9 @@ const expiringList = ref([])
 
 // ===== 批量入库 =====
 const batchImportRef = ref(null)
+
+// ===== 批量更新全量信息 =====
+const batchSyncLoading = ref(false)
 
 // ===== 数据拉取 =====
 
@@ -1212,6 +1225,29 @@ function openBatchImport() {
 function handleBatchImportSuccess() {
   fetchList()
   fetchOverview()
+}
+
+/** 批量更新全量信息（触发 IP 系统扫描） */
+async function handleBatchSync() {
+  try {
+    await ElMessageBox.confirm(
+      '将对所有在库专利调用 IP 系统获取最新全量信息（年费、法律状态、变更等），耗时较长。确定继续？',
+      '批量更新全量信息',
+      { type: 'warning', confirmButtonText: '开始更新' }
+    )
+  } catch (e) {
+    return
+  }
+
+  batchSyncLoading.value = true
+  try {
+    await triggerAnomalyScan()
+    ElMessage.success('批量更新任务已启动，后台运行中，完成后可在异常告警中查看结果')
+  } catch (e) {
+    // 拦截器已提示
+  } finally {
+    batchSyncLoading.value = false
+  }
 }
 
 /**
