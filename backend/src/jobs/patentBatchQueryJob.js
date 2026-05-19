@@ -19,8 +19,10 @@ const PatentInventory = require('../models/PatentInventory');
 const patentAnomalyService = require('../services/patentAnomalyService');
 const logger = require('../utils/logger');
 
-const REQUEST_INTERVAL_MS = 800;
+const REQUEST_INTERVAL_MS = 3000;
 const FAILURE_PAUSE_MS = 60000;
+const BATCH_PAUSE_SIZE = 20;
+const BATCH_PAUSE_MS = 30000;
 const MAX_CONSECUTIVE_FAILURES = 3;
 const IP_API_BASE = process.env.IP_API_BASE_URL || 'https://iptt.top/api/v1';
 const PROGRESS_KEY = 'patent_scan_progress';
@@ -50,6 +52,24 @@ async function fetchIpPatentDetail(patentNo, token) {
     return response.data.data;
   }
   throw new Error(response.data?.message || 'IP 系统返回非 200');
+}
+
+/**
+ * 调用 IP 系统获取专利基本信息（含 patent_details）
+ */
+async function fetchIpPatentInfo(patentNo, token) {
+  const response = await axios.get(
+    `${IP_API_BASE}/patents/no/${encodeURIComponent(patentNo)}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` },
+      timeout: 15000
+    }
+  );
+  if (response.data?.code === 200) {
+    return response.data.data;
+  }
+  // 这个接口可能对某些专利返回 404，不算严重错误
+  return null;
 }
 
 function sleep(ms) {
@@ -143,24 +163,55 @@ async function run() {
   for (let i = 0; i < inventories.length; i++) {
     const inv = inventories[i];
 
+    // 每 BATCH_PAUSE_SIZE 条暂停一次
+    if (i > 0 && i % BATCH_PAUSE_SIZE === 0) {
+      await appendLog(progress, `已处理 ${i} 条，暂停 ${BATCH_PAUSE_MS / 1000} 秒避免风控...`, 'info');
+      await sleep(BATCH_PAUSE_MS);
+    }
+
     try {
-      // 拉取 IP 系统数据
-      const ipData = await fetchIpPatentDetail(inv.patent_no, token);
+      // 1) 调用年费详情接口（含应缴/已缴/发文/质押/许可/变更）
+      const ipFeeData = await fetchIpPatentDetail(inv.patent_no, token);
+
+      // 间隔后调用第二个接口
+      await sleep(REQUEST_INTERVAL_MS);
+
+      // 2) 调用专利基本信息接口（含发明人/代理/IPC/授权等）
+      let ipPatentInfo = null;
+      try {
+        ipPatentInfo = await fetchIpPatentInfo(inv.patent_no, token);
+      } catch (e2) {
+        // 第二个接口失败不影响整体
+        logger.warn(`[PatentBatchQueryJob] ${inv.patent_no} 基本信息获取失败: ${e2.message}`);
+      }
+
+      // 合并两个接口的数据用于异常检测
+      const mergedData = { ...ipFeeData };
+      if (ipPatentInfo) {
+        // 补充 detail 信息（发明人/代理/IPC 等）
+        if (ipPatentInfo.detail && !mergedData.detail) {
+          mergedData.detail = ipPatentInfo.detail;
+        }
+        // 补充官文数量等
+        if (ipPatentInfo.noticeCount !== undefined) {
+          mergedData.noticeCount = ipPatentInfo.noticeCount;
+        }
+      }
 
       // 异常检测
-      const newAlerts = await patentAnomalyService.detectAndRecord(inv, ipData);
+      const newAlerts = await patentAnomalyService.detectAndRecord(inv, mergedData);
       progress.alerts += newAlerts.length;
 
-      // 同步基础信息
+      // 同步基础信息到本地
       const updates = {};
-      if (ipData.patent?.patentName && (!inv.patent_name || inv.patent_name === inv.patent_no)) {
-        updates.patent_name = ipData.patent.patentName;
+      if (mergedData.patent?.patentName && (!inv.patent_name || inv.patent_name === inv.patent_no)) {
+        updates.patent_name = mergedData.patent.patentName;
       }
-      if (ipData.patent?.patentType && !inv.patent_type) {
-        updates.patent_type = ipData.patent.patentType;
+      if (mergedData.patent?.patentType && !inv.patent_type) {
+        updates.patent_type = mergedData.patent.patentType;
       }
-      if (ipData.patent?.nextFeeDeadline && ipData.patent.nextFeeDeadline !== inv.next_fee_deadline) {
-        updates.next_fee_deadline = ipData.patent.nextFeeDeadline;
+      if (mergedData.patent?.nextFeeDeadline && mergedData.patent.nextFeeDeadline !== inv.next_fee_deadline) {
+        updates.next_fee_deadline = mergedData.patent.nextFeeDeadline;
       }
       if (Object.keys(updates).length > 0) {
         await PatentInventory.update(updates, { where: { id: inv.id } });
