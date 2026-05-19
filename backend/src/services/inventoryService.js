@@ -124,8 +124,11 @@ class InventoryService {
     // 附加派生字段
     const list = data.rows.map(inv => this._attachDerivedFields(inv));
 
+    // 附加渠道销售成本
+    const listWithCosts = await this._attachChannelCosts(list);
+
     return {
-      list,
+      list: listWithCosts,
       pagination: {
         page,
         limit,
@@ -163,7 +166,8 @@ class InventoryService {
       throw new NotFoundError('库存记录不存在');
     }
 
-    return this._attachDerivedFields(inv);
+    const result = this._attachDerivedFields(inv);
+    return await this._attachChannelCosts(result);
   }
 
   /**
@@ -725,7 +729,7 @@ class InventoryService {
       obj.stock_age_days = null;
     }
 
-    // 利润预估
+    // 利润预估（不含渠道销售成本，同步计算）
     const cp = parseFloat(obj.current_price) || 0;
     const pp = parseFloat(obj.purchase_price) || 0;
     const mc = parseFloat(obj.total_maintain_cost) || 0;
@@ -734,6 +738,11 @@ class InventoryService {
 
     // 根据 resource_type 和 profit_rule 计算实得利润
     obj.net_profit = this._calculateNetProfit(obj, grossProfit);
+
+    // 渠道销售成本在列表接口中异步附加（见 getList / getDetail 的 _attachChannelCost）
+    // 这里先设为 null，由调用方补充
+    obj.channel_cost = null;
+    obj.final_profit = null;
 
     return obj;
   }
@@ -776,6 +785,54 @@ class InventoryService {
     }
 
     return grossProfit;
+  }
+
+  /**
+   * 【私有】为列表/详情结果附加渠道销售成本和最终利润
+   *
+   * 公式：final_profit = net_profit - channel_cost
+   *
+   * @param {Array|Object} items - 单个或多个附加了派生字段的对象
+   * @returns {Promise<Array|Object>}
+   */
+  async _attachChannelCosts(items) {
+    const systemSettingService = require('./systemSettingService');
+    const channelConfig = await systemSettingService.get('channel_sales_cost', {
+      '发明': 1000, '实用新型': 200, '外观': 200, 'default': 500
+    });
+
+    const attach = (obj) => {
+      const patentType = obj.patent_type || '';
+      let cost = 0;
+
+      // 直接匹配
+      if (channelConfig[patentType] !== undefined) {
+        cost = parseFloat(channelConfig[patentType]) || 0;
+      } else {
+        // 模糊匹配
+        let matched = false;
+        for (const [key, value] of Object.entries(channelConfig)) {
+          if (key === 'default') continue;
+          if (patentType.includes(key) || key.includes(patentType)) {
+            cost = parseFloat(value) || 0;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          cost = parseFloat(channelConfig.default) || 0;
+        }
+      }
+
+      obj.channel_cost = cost;
+      obj.final_profit = parseFloat(((obj.net_profit || obj.estimate_profit || 0) - cost).toFixed(2));
+      return obj;
+    };
+
+    if (Array.isArray(items)) {
+      return items.map(attach);
+    }
+    return attach(items);
   }
 
   /**

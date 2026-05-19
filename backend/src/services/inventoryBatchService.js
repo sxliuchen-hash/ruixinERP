@@ -44,6 +44,7 @@ class InventoryBatchService {
       { header: '分成数值（百分比0-100或固定金额）', key: 'profit_value', width: 24 },
       { header: '采购价', key: 'purchase_price', width: 12 },
       { header: '定价（售价）', key: 'current_price', width: 14 },
+      { header: '累计维持成本（已有成本直接填入）', key: 'total_maintain_cost', width: 26 },
       { header: '供应商名称', key: 'supplier_name', width: 22 },
       { header: '采购日期（YYYY-MM-DD）', key: 'purchase_date', width: 18 },
       { header: '入库日期（默认今日）', key: 'stock_in_date', width: 18 },
@@ -64,11 +65,12 @@ class InventoryBatchService {
         profit_value: '',
         purchase_price: 5000,
         current_price: 12000,
+        total_maintain_cost: 1400,
         supplier_name: '示例供应商',
         purchase_date: '2025-01-15',
         stock_in_date: '',
         reported_high_tech: '否',
-        remark: '示例：自有专利（专利名称留空将自动从IP系统获取）'
+        remark: '示例：自有专利，已有维持成本1400'
       },
       {
         patent_no: '2021100000001',
@@ -81,6 +83,7 @@ class InventoryBatchService {
         profit_value: 30,
         purchase_price: 0,
         current_price: 20000,
+        total_maintain_cost: 0,
         supplier_name: '',
         purchase_date: '',
         stock_in_date: '',
@@ -98,6 +101,7 @@ class InventoryBatchService {
         profit_value: 5000,
         purchase_price: 0,
         current_price: 18000,
+        total_maintain_cost: 600,
         supplier_name: '',
         purchase_date: '',
         stock_in_date: '',
@@ -188,6 +192,7 @@ class InventoryBatchService {
         profit_rule: this._parseProfitRule(profitModeRaw, profitValueRaw),
         purchase_price: this._parseNumber(this._getCellValue(row, colMap.purchase_price)),
         current_price: this._parseNumber(this._getCellValue(row, colMap.current_price)),
+        total_maintain_cost: this._parseNumber(this._getCellValue(row, colMap.total_maintain_cost)),
         supplier_name: this._getCellValue(row, colMap.supplier_name)
           ? String(this._getCellValue(row, colMap.supplier_name)).trim()
           : '',
@@ -353,11 +358,11 @@ class InventoryBatchService {
           profit_rule: row.profit_rule || null,
           purchase_price: row.purchase_price || 0,
           current_price: row.current_price || 0,
+          total_maintain_cost: row.total_maintain_cost || 0,
           purchase_date: row.purchase_date || null,
           supplier_id: row.supplier_id || null,
           stock_in_date: stockInDate,
           status: 'in_stock',
-          total_maintain_cost: 0,
           reported_high_tech: row.reported_high_tech || false,
           remark: row.remark || null,
           created_by: userId
@@ -396,6 +401,10 @@ class InventoryBatchService {
 
   /**
    * 映射 Excel 列头到字段
+   *
+   * 【匹配策略】
+   *   按"最具特征的关键词优先"原则，长关键词先匹配，避免短关键词覆盖
+   *   例如"资源类型"必须先匹配，否则会被"类型"误匹配到 patent_type
    */
   _mapColumns(headers) {
     const map = {
@@ -407,6 +416,7 @@ class InventoryBatchService {
       agent_name: null,
       profit_mode: null,
       profit_value: null,
+      total_maintain_cost: null,
       purchase_price: null,
       current_price: null,
       supplier_name: null,
@@ -418,22 +428,86 @@ class InventoryBatchService {
 
     headers.forEach((h, idx) => {
       if (!h) return;
-      const lower = h.toLowerCase();
-      if (lower.includes('专利号')) map.patent_no = idx;
-      else if (lower.includes('专利名称') || lower.includes('名称')) map.patent_name = idx;
-      else if (lower.includes('专利类型') || lower.includes('类型')) map.patent_type = idx;
-      else if (lower.includes('技术领域') || lower.includes('领域')) map.tech_field = idx;
-      else if (lower.includes('资源类型') || lower.includes('资源分类')) map.resource_type = idx;
-      else if (lower.includes('代理商')) map.agent_name = idx;
-      else if (lower.includes('分成方式')) map.profit_mode = idx;
-      else if (lower.includes('分成数值') || lower.includes('分成比例') || lower.includes('分成金额')) map.profit_value = idx;
-      else if (lower.includes('采购价') || lower.includes('成本')) map.purchase_price = idx;
-      else if (lower.includes('定价') || lower.includes('售价') || lower.includes('现价')) map.current_price = idx;
-      else if (lower.includes('供应商')) map.supplier_name = idx;
-      else if (lower.includes('采购日') || lower.includes('采购时间')) map.purchase_date = idx;
-      else if (lower.includes('入库日') || lower.includes('入库时间')) map.stock_in_date = idx;
-      else if (lower.includes('高企') || lower.includes('高新')) map.reported_high_tech = idx;
-      else if (lower.includes('备注')) map.remark = idx;
+      const text = String(h).trim();
+
+      // 严格匹配：长短语优先
+      // 1. 资源类型相关（必须早于"类型"）
+      if (text.includes('资源类型') || text.includes('资源分类')) {
+        map.resource_type = idx;
+        return;
+      }
+      if (text.includes('代理商')) {
+        map.agent_name = idx;
+        return;
+      }
+      if (text.includes('分成方式')) {
+        map.profit_mode = idx;
+        return;
+      }
+      if (text.includes('分成数值') || text.includes('分成比例') || text.includes('分成金额')) {
+        map.profit_value = idx;
+        return;
+      }
+
+      // 2. 专利相关
+      if (text.includes('专利号')) {
+        map.patent_no = idx;
+        return;
+      }
+      if (text.includes('专利名称') || (text.includes('名称') && !text.includes('代理') && !text.includes('供应'))) {
+        map.patent_name = idx;
+        return;
+      }
+      if (text.includes('专利类型') || text.includes('发明/实用') || text === '类型') {
+        map.patent_type = idx;
+        return;
+      }
+
+      // 3. 技术领域
+      if (text.includes('技术领域') || text === '领域') {
+        map.tech_field = idx;
+        return;
+      }
+
+      // 4. 价格/成本
+      if (text.includes('累计维持成本') || text.includes('维持成本')) {
+        map.total_maintain_cost = idx;
+        return;
+      }
+      if (text.includes('采购价') || (text.includes('成本') && !text.includes('维持'))) {
+        map.purchase_price = idx;
+        return;
+      }
+      if (text.includes('定价') || text.includes('售价') || text.includes('现价')) {
+        map.current_price = idx;
+        return;
+      }
+
+      // 5. 供应商
+      if (text.includes('供应商')) {
+        map.supplier_name = idx;
+        return;
+      }
+
+      // 6. 日期
+      if (text.includes('采购日') || text.includes('采购时间')) {
+        map.purchase_date = idx;
+        return;
+      }
+      if (text.includes('入库日') || text.includes('入库时间')) {
+        map.stock_in_date = idx;
+        return;
+      }
+
+      // 7. 其他
+      if (text.includes('高企') || text.includes('高新')) {
+        map.reported_high_tech = idx;
+        return;
+      }
+      if (text.includes('备注')) {
+        map.remark = idx;
+        return;
+      }
     });
 
     return map;

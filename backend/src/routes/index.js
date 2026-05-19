@@ -70,6 +70,8 @@ router.use('/salary-rules', require('./salaryRules'));
 router.use('/payroll', require('./payroll'));
 // 专利年费查询（代理 IP 系统）
 router.use('/patent-fee', require('./patentFee'));
+// 系统设置
+router.use('/system-settings', require('./systemSettings'));
 
 // TODO: Phase 2 剩余
 // router.use('/wechat', require('./wechat'));

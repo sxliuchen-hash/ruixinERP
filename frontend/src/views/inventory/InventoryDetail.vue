@@ -142,6 +142,10 @@
                 ¥ {{ formatMoney(detail.estimate_profit) }}
               </div>
             </div>
+            <div v-if="detail.channel_cost" class="money-row">
+              <div class="money-label">渠道销售成本</div>
+              <div class="money-val text-danger">¥ {{ formatMoney(detail.channel_cost) }}</div>
+            </div>
             <div v-if="detail.resource_type !== 'own'" class="money-row">
               <div class="money-label" style="font-weight: 600">实得利润（扣分成）</div>
               <div
@@ -152,10 +156,18 @@
                 ¥ {{ formatMoney(detail.net_profit) }}
               </div>
             </div>
+            <div class="money-row">
+              <div class="money-label" style="font-weight: 600">最终利润</div>
+              <div
+                class="money-val"
+                :class="(detail.final_profit || 0) >= 0 ? 'text-success' : 'text-danger'"
+                style="font-size: 20px"
+              >
+                ¥ {{ formatMoney(detail.final_profit || 0) }}
+              </div>
+            </div>
             <div class="formula-tip">
-              {{ detail.resource_type === 'own'
-                ? '计算：现价 − 采购价 − 累计维持成本'
-                : '实得利润 = 毛利润 × (1 − 代理商分成比例) 或 毛利润 − 固定分成' }}
+              最终利润 = 现价 − 采购价 − 维持成本 − 渠道成本{{ detail.resource_type !== 'own' ? ' − 代理分成' : '' }}
             </div>
           </div>
         </el-card>

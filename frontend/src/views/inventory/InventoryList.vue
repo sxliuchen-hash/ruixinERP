@@ -229,8 +229,8 @@
       </el-table-column>
       <el-table-column label="利润预估" width="120" align="right">
         <template #default="{ row }">
-          <span :class="row.estimate_profit >= 0 ? 'text-success' : 'text-danger'">
-            ¥ {{ formatMoney(row.estimate_profit) }}
+          <span :class="(row.final_profit ?? row.estimate_profit) >= 0 ? 'text-success' : 'text-danger'">
+            ¥ {{ formatMoney(row.final_profit ?? row.estimate_profit) }}
           </span>
         </template>
       </el-table-column>

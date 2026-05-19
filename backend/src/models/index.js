@@ -57,6 +57,9 @@ const BankStatement = require('./BankStatement');
 // Phase 5: 人事薪资（T-HR1）
 const Employee = require('./Employee');
 
+// Phase 5: 系统设置
+const SystemSetting = require('./SystemSetting');
+
 // ==================== 主项目模型（只读） ====================
 const MainUser = require('./MainUser');
 
@@ -197,5 +200,6 @@ module.exports = {
   Notification,
   BankStatement,
   Employee,
+  SystemSetting,
   MainUser,
 };
