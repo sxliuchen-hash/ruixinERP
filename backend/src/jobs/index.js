@@ -58,6 +58,14 @@ const initJobs = () => {
   });
   logger.info('已注册：固定月费自动生成（每月 1 日 00:05）');
 
+  // 6. 在库专利全量信息扫描（每周日 06:00）
+  cron.schedule('0 6 * * 0', () => {
+    require('./patentBatchQueryJob').run().catch(e => {
+      logger.error('patentBatchQueryJob 执行失败:', e);
+    });
+  });
+  logger.info('已注册：在库专利全量信息扫描（每周日 06:00）');
+
   logger.info('定时任务初始化完成');
 };
 

@@ -40,6 +40,7 @@ const LoanRepayment = require('./LoanRepayment');
 const PatentInventory = require('./PatentInventory');
 const PatentAnnualFee = require('./PatentAnnualFee');
 const PatentPriceHistory = require('./PatentPriceHistory');
+const PatentAnomalyAlert = require('./PatentAnomalyAlert');
 
 // Phase 3: 交易项目（T16）
 const Project = require('./Project');
@@ -115,8 +116,14 @@ BankAccount.hasMany(LoanRepayment, { foreignKey: 'account_id', as: 'loanRepaymen
 // project_id 预留给 T16 Project 模型，这里不建关联
 PatentInventory.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
 PatentInventory.belongsTo(Contract, { foreignKey: 'contract_id', as: 'contract' });
+PatentInventory.belongsTo(Supplier, { foreignKey: 'agent_id', as: 'agent' });
 Supplier.hasMany(PatentInventory, { foreignKey: 'supplier_id', as: 'inventories' });
+Supplier.hasMany(PatentInventory, { foreignKey: 'agent_id', as: 'agentedInventories' });
 Contract.hasMany(PatentInventory, { foreignKey: 'contract_id', as: 'inventories' });
+
+// ----- 专利异常告警 ↔ 库存 -----
+PatentAnomalyAlert.belongsTo(PatentInventory, { foreignKey: 'inventory_id', as: 'inventory' });
+PatentInventory.hasMany(PatentAnomalyAlert, { foreignKey: 'inventory_id', as: 'anomalyAlerts' });
 
 // ----- 专利年费 ↔ 库存/付款（T14） -----
 PatentAnnualFee.belongsTo(PatentInventory, { foreignKey: 'inventory_id', as: 'inventory' });
@@ -184,6 +191,7 @@ module.exports = {
   PatentInventory,
   PatentAnnualFee,
   PatentPriceHistory,
+  PatentAnomalyAlert,
   Project,
   CostCategory,
   Notification,

@@ -73,6 +73,14 @@
           <el-descriptions :column="2" border>
             <el-descriptions-item label="专利号">{{ detail.patent_no }}</el-descriptions-item>
             <el-descriptions-item label="专利类型">{{ detail.patent_type || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="资源类型">
+              <el-tag :type="RESOURCE_TYPE_MAP[detail.resource_type]?.type" size="small">
+                {{ RESOURCE_TYPE_MAP[detail.resource_type]?.label || '自有' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="代理商">
+              {{ detail.agent ? detail.agent.name : '-' }}
+            </el-descriptions-item>
             <el-descriptions-item label="专利名称" :span="2">{{ detail.patent_name }}</el-descriptions-item>
             <el-descriptions-item label="技术领域">{{ detail.tech_field || '-' }}</el-descriptions-item>
             <el-descriptions-item label="供应商">
@@ -125,7 +133,7 @@
             </div>
             <el-divider style="margin: 12px 0" />
             <div class="money-row">
-              <div class="money-label" style="font-weight: 600">利润预估</div>
+              <div class="money-label" style="font-weight: 600">毛利润预估</div>
               <div
                 class="money-val"
                 :class="detail.estimate_profit >= 0 ? 'text-success' : 'text-danger'"
@@ -134,8 +142,20 @@
                 ¥ {{ formatMoney(detail.estimate_profit) }}
               </div>
             </div>
+            <div v-if="detail.resource_type !== 'own'" class="money-row">
+              <div class="money-label" style="font-weight: 600">实得利润（扣分成）</div>
+              <div
+                class="money-val"
+                :class="detail.net_profit >= 0 ? 'text-success' : 'text-danger'"
+                style="font-size: 18px"
+              >
+                ¥ {{ formatMoney(detail.net_profit) }}
+              </div>
+            </div>
             <div class="formula-tip">
-              计算：现价 − 采购价 − 累计维持成本
+              {{ detail.resource_type === 'own'
+                ? '计算：现价 − 采购价 − 累计维持成本'
+                : '实得利润 = 毛利润 × (1 − 代理商分成比例) 或 毛利润 − 固定分成' }}
             </div>
           </div>
         </el-card>
@@ -526,7 +546,7 @@ import {
 } from '@/api/inventory'
 import { getPatentFeeDetail } from '@/api/patentFee'
 import { formatMoney, formatDate } from '@/utils/format'
-import { INVENTORY_STATUS_MAP, FEE_TYPE_MAP, IP_FEE_STATUS_MAP } from '@/utils/constants'
+import { INVENTORY_STATUS_MAP, FEE_TYPE_MAP, IP_FEE_STATUS_MAP, RESOURCE_TYPE_MAP } from '@/utils/constants'
 
 const route = useRoute()
 const router = useRouter()

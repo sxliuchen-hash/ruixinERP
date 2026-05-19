@@ -109,6 +109,35 @@ export function syncFromIpSystem(id) {
   return request.post(`/inventory/${id}/sync-from-ip`)
 }
 
+// ============ 异常告警 ============
+
+/**
+ * 异常告警列表
+ * @param {Object} params { page, pageSize, severity, anomaly_type, is_resolved, patent_no }
+ */
+export function getAnomalies(params) {
+  return request.get('/inventory/anomalies', { params })
+}
+
+/** 异常告警统计 */
+export function getAnomalyOverview() {
+  return request.get('/inventory/anomalies/overview')
+}
+
+/**
+ * 标记告警为已处理
+ * @param {number} id 告警 ID
+ * @param {string} note 处理备注
+ */
+export function resolveAnomaly(id, note) {
+  return request.put(`/inventory/anomalies/${id}/resolve`, { note })
+}
+
+/** 手动触发批量扫描（仅管理员） */
+export function triggerAnomalyScan() {
+  return request.post('/inventory/anomalies/scan')
+}
+
 // ============ 聚合接口 ============
 
 /** 库存总览统计 */

@@ -83,6 +83,12 @@ const routes = [
         meta: { title: '专利库存' }
       },
       {
+        path: 'inventory/anomalies',
+        name: 'PatentAnomalyAlerts',
+        component: () => import('@/views/inventory/PatentAnomalyAlerts.vue'),
+        meta: { title: '专利异常告警' }
+      },
+      {
         path: 'inventory/:id',
         name: 'InventoryDetail',
         component: () => import('@/views/inventory/InventoryDetail.vue'),

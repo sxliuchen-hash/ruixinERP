@@ -90,6 +90,19 @@ router.post('/batch-delete',
   inventoryController.batchDelete
 );
 
+// ===== 异常告警 =====
+router.get('/anomalies', inventoryController.getAnomalies);
+router.get('/anomalies/overview', inventoryController.getAnomalyOverview);
+router.put('/anomalies/:id/resolve',
+  operationLog('update', 'patent_anomaly_alerts'),
+  inventoryController.resolveAnomaly
+);
+router.post('/anomalies/scan',
+  requireAdmin(),
+  operationLog('create', 'patent_anomaly_scan'),
+  inventoryController.triggerAnomalyScan
+);
+
 // ===== 列表 / 入库 =====
 router.get('/',
   validate(listInventoryQuerySchema, 'query'),

@@ -47,6 +47,20 @@
             :value="key"
           />
         </el-select>
+        <el-select
+          v-model="filterResourceType"
+          placeholder="资源类型"
+          clearable
+          style="width: 130px"
+          @change="handleSearch"
+        >
+          <el-option
+            v-for="(val, key) in RESOURCE_TYPE_MAP"
+            :key="key"
+            :label="val.label"
+            :value="key"
+          />
+        </el-select>
         <el-input
           v-model="filterTechField"
           placeholder="技术领域"
@@ -87,6 +101,11 @@
         <el-button type="warning" @click="openExpiringDrawer">
           <el-icon><Bell /></el-icon>到期预警
         </el-button>
+        <el-badge :value="anomalyCount.danger" :hidden="!anomalyCount.danger" type="danger">
+          <el-button type="danger" plain @click="goAnomalyPage">
+            <el-icon><Warning /></el-icon>异常告警
+          </el-button>
+        </el-badge>
         <ExportButton
           path="/export/inventory"
           :params="exportParams"
@@ -181,6 +200,14 @@
       <el-table-column v-if="userStore.isAdmin" type="selection" width="50" fixed="left" />
       <el-table-column prop="patent_no" label="专利号" width="150" fixed="left" />
       <el-table-column prop="patent_name" label="名称" min-width="200" show-overflow-tooltip />
+      <el-table-column label="资源类型" width="120" align="center">
+        <template #default="{ row }">
+          <el-tag :type="RESOURCE_TYPE_MAP[row.resource_type]?.type" size="small">
+            {{ RESOURCE_TYPE_MAP[row.resource_type]?.label || '自有' }}
+          </el-tag>
+          <div v-if="row.agent" class="agent-name">{{ row.agent.name }}</div>
+        </template>
+      </el-table-column>
       <el-table-column prop="patent_type" label="类型" width="100" align="center">
         <template #default="{ row }">{{ row.patent_type || '-' }}</template>
       </el-table-column>
@@ -303,6 +330,57 @@
             maxlength="500"
             show-word-limit
           />
+        </el-form-item>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="资源类型" prop="resource_type">
+              <el-select v-model="formData.resource_type" style="width: 100%" @change="handleResourceTypeChange">
+                <el-option
+                  v-for="(val, key) in RESOURCE_TYPE_MAP"
+                  :key="key"
+                  :label="val.label"
+                  :value="key"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12" v-if="formData.resource_type !== 'own'">
+            <el-form-item label="代理商" prop="agent_id">
+              <SupplierSelect v-model="formData.agent_id" placeholder="请选择代理商" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item v-if="formData.resource_type !== 'own'" label="分成规则">
+          <div style="display: flex; gap: 12px; width: 100%; align-items: center; flex-wrap: wrap">
+            <el-radio-group v-model="profitRuleMode" @change="syncProfitRule" size="small">
+              <el-radio value="percent">按百分比</el-radio>
+              <el-radio value="fixed">固定费用</el-radio>
+            </el-radio-group>
+            <el-input-number
+              v-if="profitRuleMode === 'percent'"
+              v-model="profitRulePercent"
+              :min="0"
+              :max="100"
+              :precision="1"
+              :step="5"
+              style="width: 140px"
+              @change="syncProfitRule"
+            />
+            <el-input-number
+              v-else
+              v-model="profitRuleFixed"
+              :min="0"
+              :precision="2"
+              :step="500"
+              style="width: 160px"
+              @change="syncProfitRule"
+            />
+            <span style="color: #909399; font-size: 12px">
+              {{ profitRuleMode === 'percent' ? '代理商分成比例（%）' : '代理商固定收取金额（¥）' }}
+            </span>
+          </div>
         </el-form-item>
 
         <el-row :gutter="16">
@@ -604,7 +682,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Money, Bell, ArrowDown, Delete } from '@element-plus/icons-vue'
+import { Search, Plus, Money, Bell, ArrowDown, Delete, Warning } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getInventoryList,
@@ -616,10 +694,11 @@ import {
   batchDeleteInventory,
   changeInventoryStatus,
   changeInventoryPrice,
-  batchChangePrice
+  batchChangePrice,
+  getAnomalyOverview
 } from '@/api/inventory'
 import { formatMoney, formatDate } from '@/utils/format'
-import { INVENTORY_STATUS_MAP } from '@/utils/constants'
+import { INVENTORY_STATUS_MAP, RESOURCE_TYPE_MAP } from '@/utils/constants'
 import { useUserStore } from '@/stores/user'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ContractSelect from '@/components/business/ContractSelect.vue'
@@ -635,6 +714,7 @@ const inventoryList = ref([])
 const selectedRows = ref([])
 const searchKeyword = ref('')
 const filterStatus = ref('')
+const filterResourceType = ref('')
 const filterTechField = ref('')
 const filterMinAge = ref(null)
 const filterMaxAge = ref(null)
@@ -644,11 +724,15 @@ const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 // 总览统计
 const overview = ref(null)
 
+// 异常告警计数（用于顶部按钮 badge）
+const anomalyCount = ref({ danger: 0, warning: 0, info: 0, total: 0 })
+
 /** 导出按钮参数：复用当前筛选条件 */
 const exportParams = computed(() => {
   const p = {}
   if (searchKeyword.value) p.keyword = searchKeyword.value
   if (filterStatus.value) p.status = filterStatus.value
+  if (filterResourceType.value) p.resource_type = filterResourceType.value
   if (filterTechField.value) p.tech_field = filterTechField.value
   if (filterMinAge.value !== null && filterMinAge.value !== '') p.min_age = filterMinAge.value
   if (filterMaxAge.value !== null && filterMaxAge.value !== '') p.max_age = filterMaxAge.value
@@ -670,6 +754,9 @@ const formData = reactive({
   patent_no: '',
   patent_name: '',
   patent_type: '',
+  resource_type: 'own',
+  agent_id: null,
+  profit_rule: null,
   tech_field: '',
   purchase_price: 0,
   current_price: 0,
@@ -682,6 +769,11 @@ const formData = reactive({
   reported_high_tech: false,
   remark: ''
 })
+
+// 利润规则的扁平化 ref（便于表单绑定）
+const profitRuleMode = ref('percent')
+const profitRulePercent = ref(30)
+const profitRuleFixed = ref(0)
 
 const formRules = {
   patent_no: [{ required: true, message: '请输入专利号', trigger: 'blur' }],
@@ -739,6 +831,7 @@ async function fetchList() {
     }
     if (searchKeyword.value) params.keyword = searchKeyword.value
     if (filterStatus.value) params.status = filterStatus.value
+    if (filterResourceType.value) params.resource_type = filterResourceType.value
     if (filterTechField.value) params.tech_field = filterTechField.value
     if (filterMinAge.value !== null && filterMinAge.value !== '') params.min_age = filterMinAge.value
     if (filterMaxAge.value !== null && filterMaxAge.value !== '') params.max_age = filterMaxAge.value
@@ -766,6 +859,21 @@ async function fetchOverview() {
   }
 }
 
+/** 获取异常告警计数（用于顶部按钮的 badge） */
+async function fetchAnomalyCount() {
+  try {
+    const res = await getAnomalyOverview()
+    anomalyCount.value = res.data || { danger: 0, warning: 0, info: 0, total: 0 }
+  } catch (e) {
+    // 静默失败，不打扰用户
+  }
+}
+
+/** 跳转到异常告警页 */
+function goAnomalyPage() {
+  router.push('/inventory/anomalies')
+}
+
 async function fetchExpiring() {
   expiringLoading.value = true
   try {
@@ -790,6 +898,9 @@ function resetForm() {
     patent_no: '',
     patent_name: '',
     patent_type: '',
+    resource_type: 'own',
+    agent_id: null,
+    profit_rule: null,
     tech_field: '',
     purchase_price: 0,
     current_price: 0,
@@ -802,6 +913,9 @@ function resetForm() {
     reported_high_tech: false,
     remark: ''
   })
+  profitRuleMode.value = 'percent'
+  profitRulePercent.value = 30
+  profitRuleFixed.value = 0
 }
 
 function handleCreate() {
@@ -826,6 +940,9 @@ function handleEdit(row) {
     patent_no: row.patent_no,
     patent_name: row.patent_name,
     patent_type: row.patent_type || '',
+    resource_type: row.resource_type || 'own',
+    agent_id: row.agent_id || null,
+    profit_rule: row.profit_rule || null,
     tech_field: row.tech_field || '',
     purchase_price: parseFloat(row.purchase_price) || 0,
     current_price: parseFloat(row.current_price) || 0,
@@ -838,12 +955,56 @@ function handleEdit(row) {
     reported_high_tech: row.reported_high_tech || false,
     remark: row.remark || ''
   })
+
+  // 还原利润规则
+  if (row.profit_rule && typeof row.profit_rule === 'object') {
+    profitRuleMode.value = row.profit_rule.mode || 'percent'
+    profitRulePercent.value = row.profit_rule.agent_share_pct || 30
+    profitRuleFixed.value = row.profit_rule.agent_fixed_fee || 0
+  } else {
+    profitRuleMode.value = 'percent'
+    profitRulePercent.value = 30
+    profitRuleFixed.value = 0
+  }
+
   dialogVisible.value = true
+}
+
+/** 资源类型变化时清理代理商数据 */
+function handleResourceTypeChange(val) {
+  if (val === 'own') {
+    formData.agent_id = null
+    formData.profit_rule = null
+  } else {
+    syncProfitRule()
+  }
+}
+
+/** 同步扁平化的规则字段到 formData.profit_rule JSON */
+function syncProfitRule() {
+  if (formData.resource_type === 'own') {
+    formData.profit_rule = null
+    return
+  }
+  if (profitRuleMode.value === 'percent') {
+    formData.profit_rule = {
+      mode: 'percent',
+      agent_share_pct: profitRulePercent.value
+    }
+  } else {
+    formData.profit_rule = {
+      mode: 'fixed',
+      agent_fixed_fee: profitRuleFixed.value
+    }
+  }
 }
 
 async function handleSubmit() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
+
+  // 确保利润规则已同步
+  syncProfitRule()
 
   submitLoading.value = true
   try {
@@ -1072,6 +1233,7 @@ function getDeadlineClass(deadline) {
 onMounted(() => {
   fetchList()
   fetchOverview()
+  fetchAnomalyCount()
 })
 </script>
 
@@ -1158,4 +1320,10 @@ onMounted(() => {
 .text-success { color: #67c23a; }
 .text-warning { color: #e6a23c; }
 .text-danger  { color: #f56c6c; }
+
+.agent-name {
+  font-size: 11px;
+  color: #909399;
+  margin-top: 2px;
+}
 </style>

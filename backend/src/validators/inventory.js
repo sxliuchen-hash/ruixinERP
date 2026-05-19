@@ -5,6 +5,7 @@ const Joi = require('joi');
 
 const STATUS_VALUES = ['in_stock', 'sold', 'abandoned', 'transferring'];
 const FEE_TYPES = ['annual', 'agency', 'other'];
+const RESOURCE_TYPES = ['own', 'exclusive_agent', 'joint_agent'];
 
 /**
  * 创建库存
@@ -17,6 +18,9 @@ const createInventorySchema = Joi.object({
     'any.required': '专利名称不能为空'
   }),
   patent_type: Joi.string().max(20).allow('', null),
+  resource_type: Joi.string().valid(...RESOURCE_TYPES).default('own'),
+  agent_id: Joi.number().integer().allow(null),
+  profit_rule: Joi.object().allow(null),
   tech_field: Joi.string().max(100).allow('', null),
   purchase_price: Joi.number().min(0).default(0),
   purchase_date: Joi.date().iso().allow('', null),
@@ -38,6 +42,9 @@ const updateInventorySchema = Joi.object({
   patent_no: Joi.string().max(50),
   patent_name: Joi.string().max(500),
   patent_type: Joi.string().max(20).allow('', null),
+  resource_type: Joi.string().valid(...RESOURCE_TYPES),
+  agent_id: Joi.number().integer().allow(null),
+  profit_rule: Joi.object().allow(null),
   tech_field: Joi.string().max(100).allow('', null),
   purchase_price: Joi.number().min(0),
   purchase_date: Joi.date().iso().allow('', null),
@@ -58,6 +65,8 @@ const updateInventorySchema = Joi.object({
  */
 const listInventoryQuerySchema = Joi.object({
   status: Joi.string().valid(...STATUS_VALUES).allow('', null),
+  resource_type: Joi.string().valid(...RESOURCE_TYPES).allow('', null),
+  agent_id: Joi.number().integer().allow('', null),
   tech_field: Joi.string().max(100).allow('', null),
   supplier_id: Joi.number().integer().allow('', null),
   project_id: Joi.number().integer().allow('', null),

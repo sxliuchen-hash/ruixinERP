@@ -58,6 +58,19 @@ const PatentInventory = sequelize.define('PatentInventory', {
     type: DataTypes.STRING(20),
     comment: '专利类型（发明/实用新型/外观）'
   },
+  resource_type: {
+    type: DataTypes.ENUM('own', 'exclusive_agent', 'joint_agent'),
+    defaultValue: 'own',
+    comment: '资源类型：自有/独家代理/共同代理'
+  },
+  agent_id: {
+    type: DataTypes.INTEGER,
+    comment: '代理商ID（关联 suppliers.id，独家/共同代理时使用）'
+  },
+  profit_rule: {
+    type: DataTypes.JSON,
+    comment: '利润分成规则'
+  },
   tech_field: {
     type: DataTypes.STRING(100),
     comment: '技术领域'

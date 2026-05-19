@@ -55,7 +55,7 @@ class InventoryService {
   async getList(query, userId, userRole) {
     const { page, limit, offset } = parsePagination(query);
     const {
-      status, tech_field, supplier_id, project_id,
+      status, resource_type, agent_id, tech_field, supplier_id, project_id,
       min_age, max_age, sort, order, keyword
     } = query;
 
@@ -66,6 +66,8 @@ class InventoryService {
     }
 
     if (status) where.status = status;
+    if (resource_type) where.resource_type = resource_type;
+    if (agent_id) where.agent_id = parseInt(agent_id, 10);
     if (tech_field) where.tech_field = { [Op.like]: `%${tech_field}%` };
     if (supplier_id) where.supplier_id = parseInt(supplier_id, 10);
     if (project_id) where.project_id = parseInt(project_id, 10);
@@ -111,6 +113,7 @@ class InventoryService {
       where,
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
+        { model: Supplier, as: 'agent', attributes: ['id', 'name'] },
         { model: Contract, as: 'contract', attributes: ['id', 'contract_no', 'title'] }
       ],
       order: orderClause,
@@ -139,6 +142,7 @@ class InventoryService {
     const inv = await PatentInventory.findByPk(id, {
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
+        { model: Supplier, as: 'agent', attributes: ['id', 'name'] },
         { model: Contract, as: 'contract', attributes: ['id', 'contract_no', 'title'] },
         {
           model: PatentAnnualFee,
@@ -721,13 +725,57 @@ class InventoryService {
       obj.stock_age_days = null;
     }
 
-    // 利润预估（在库才有意义，其他状态也给出数字便于比较）
+    // 利润预估
     const cp = parseFloat(obj.current_price) || 0;
     const pp = parseFloat(obj.purchase_price) || 0;
     const mc = parseFloat(obj.total_maintain_cost) || 0;
-    obj.estimate_profit = parseFloat((cp - pp - mc).toFixed(2));
+    const grossProfit = parseFloat((cp - pp - mc).toFixed(2));
+    obj.estimate_profit = grossProfit;
+
+    // 根据 resource_type 和 profit_rule 计算实得利润
+    obj.net_profit = this._calculateNetProfit(obj, grossProfit);
 
     return obj;
+  }
+
+  /**
+   * 根据资源类型和分成规则计算实得利润
+   *
+   * 规则示例：
+   *   own:               net_profit = grossProfit
+   *   exclusive_agent:   net_profit = grossProfit * (1 - agent_share_pct/100)
+   *                      或 net_profit = grossProfit - fixed_fee
+   *   joint_agent:       同上，可设不同分成比例
+   *
+   * profit_rule JSON 结构：
+   *   {
+   *     mode: 'percent' | 'fixed' | 'tiered',
+   *     agent_share_pct: 30,       // mode=percent
+   *     agent_fixed_fee: 5000,     // mode=fixed
+   *     tiers: [...],              // mode=tiered（预留）
+   *     description: '描述'
+   *   }
+   */
+  _calculateNetProfit(inv, grossProfit) {
+    if (!inv.resource_type || inv.resource_type === 'own') {
+      return grossProfit;
+    }
+
+    const rule = inv.profit_rule;
+    if (!rule || typeof rule !== 'object') {
+      return grossProfit; // 无规则时，等同自有
+    }
+
+    if (rule.mode === 'percent' && typeof rule.agent_share_pct === 'number') {
+      const ourShare = 1 - rule.agent_share_pct / 100;
+      return parseFloat((grossProfit * ourShare).toFixed(2));
+    }
+
+    if (rule.mode === 'fixed' && typeof rule.agent_fixed_fee === 'number') {
+      return parseFloat((grossProfit - rule.agent_fixed_fee).toFixed(2));
+    }
+
+    return grossProfit;
   }
 
   /**

@@ -9,6 +9,7 @@
 
 const inventoryService = require('../services/inventoryService');
 const inventoryBatchService = require('../services/inventoryBatchService');
+const patentAnomalyService = require('../services/patentAnomalyService');
 const { sendExcel } = require('../utils/excelHelper');
 
 /** GET /api/v1/inventory */
@@ -265,6 +266,59 @@ async function batchImportExecute(req, res, next) {
   }
 }
 
+/** GET /api/v1/inventory/anomalies - 获取异常告警列表 */
+async function getAnomalies(req, res, next) {
+  try {
+    const data = await patentAnomalyService.getList(req.query);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** GET /api/v1/inventory/anomalies/overview - 异常告警统计 */
+async function getAnomalyOverview(req, res, next) {
+  try {
+    const data = await patentAnomalyService.getOverview();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** PUT /api/v1/inventory/anomalies/:id/resolve - 标记告警已处理 */
+async function resolveAnomaly(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { note } = req.body;
+    const userId = req.user.id;
+    const data = await patentAnomalyService.markResolved(parseInt(id, 10), userId, note);
+    if (!data) {
+      return res.status(404).json({ success: false, message: '告警记录不存在' });
+    }
+    res.json({ success: true, message: '已标记为处理', data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** POST /api/v1/inventory/anomalies/scan - 手动触发批量扫描（仅管理员） */
+async function triggerAnomalyScan(req, res, next) {
+  try {
+    const job = require('../jobs/patentBatchQueryJob');
+    // 异步执行，立即返回
+    job.run().catch(e => {
+      require('../utils/logger').error('手动触发扫描失败:', e);
+    });
+    res.json({
+      success: true,
+      message: '扫描任务已启动，请稍后查看告警列表'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getList,
   getOverview,
@@ -282,5 +336,9 @@ module.exports = {
   syncFromIpSystem,
   batchImportTemplate,
   batchImportValidate,
-  batchImportExecute
+  batchImportExecute,
+  getAnomalies,
+  getAnomalyOverview,
+  resolveAnomaly,
+  triggerAnomalyScan
 };

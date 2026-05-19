@@ -240,6 +240,39 @@ export const PROJECT_STATUS_MAP = {
 }
 
 /**
+ * 专利资源类型（与后端 patent_inventory.resource_type 枚举一致）
+ */
+export const RESOURCE_TYPE = {
+  OWN: 'own',
+  EXCLUSIVE_AGENT: 'exclusive_agent',
+  JOINT_AGENT: 'joint_agent'
+}
+
+export const RESOURCE_TYPE_MAP = {
+  [RESOURCE_TYPE.OWN]: { label: '自有', type: 'success' },
+  [RESOURCE_TYPE.EXCLUSIVE_AGENT]: { label: '独家代理', type: 'warning' },
+  [RESOURCE_TYPE.JOINT_AGENT]: { label: '共同代理', type: 'info' }
+}
+
+/**
+ * 专利异常告警类型
+ */
+export const ANOMALY_TYPE_MAP = {
+  pledge: { label: '新增质押', type: 'warning' },
+  license: { label: '新增许可', type: 'warning' },
+  change: { label: '著录变更', type: 'danger' },
+  transfer_fee: { label: '变更费', type: 'danger' },
+  legal_status: { label: '法律状态异常', type: 'danger' },
+  other: { label: '其他', type: 'info' }
+}
+
+export const ANOMALY_SEVERITY_MAP = {
+  danger: { label: '紧急', type: 'danger' },
+  warning: { label: '警告', type: 'warning' },
+  info: { label: '提示', type: 'info' }
+}
+
+/**
  * IP 系统年费状态（来自 IP 系统 patent-fee 接口）
  */
 export const IP_FEE_STATUS = {
