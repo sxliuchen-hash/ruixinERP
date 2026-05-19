@@ -1,7 +1,8 @@
 <template>
   <div class="sidebar">
     <div class="logo">
-      <h3>ERP 财务系统</h3>
+      <h3 v-if="!collapsed">ERP 财务系统</h3>
+      <h3 v-else style="font-size: 14px">ERP</h3>
     </div>
     <el-menu
       :default-active="activeMenu"
@@ -41,10 +42,17 @@
       </el-sub-menu>
 
       <!-- 专利库存 -->
-      <el-menu-item index="/inventory">
-        <el-icon><Box /></el-icon>
-        <span>专利库存</span>
-      </el-menu-item>
+      <el-sub-menu index="inventory">
+        <template #title>
+          <el-icon><Box /></el-icon>
+          <span>专利库存</span>
+        </template>
+        <el-menu-item index="/inventory">库存列表</el-menu-item>
+        <el-menu-item index="/inventory/anomalies">
+          <el-icon><Warning /></el-icon>
+          <span>异常告警</span>
+        </el-menu-item>
+      </el-sub-menu>
 
       <!-- 基础数据 -->
       <el-sub-menu index="base">
@@ -89,7 +97,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  DataAnalysis, Briefcase, Wallet, Box, User, Tools, Setting
+  DataAnalysis, Briefcase, Wallet, Box, User, Tools, Setting, Warning
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
@@ -108,6 +116,7 @@ const activeMenu = computed(() => {
   const path = route.path
   if (path.match(/^\/contracts\/\d+/)) return '/contracts'
   if (path.match(/^\/projects\/\d+/)) return '/projects'
+  if (path === '/inventory/anomalies') return '/inventory/anomalies'
   if (path.match(/^\/inventory\/\d+/)) return '/inventory'
   return path
 })

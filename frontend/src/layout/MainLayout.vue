@@ -1,11 +1,22 @@
 <template>
   <el-container class="main-layout">
-    <el-aside width="220px" class="aside">
-      <Sidebar />
+    <el-aside :width="sidebarCollapsed ? '64px' : '220px'" class="aside">
+      <Sidebar :collapsed="sidebarCollapsed" />
     </el-aside>
     <el-container>
       <el-header class="header">
         <div class="header-left">
+          <el-button
+            link
+            class="collapse-btn"
+            @click="toggleSidebar"
+            :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+          >
+            <el-icon :size="20">
+              <Fold v-if="!sidebarCollapsed" />
+              <Expand v-else />
+            </el-icon>
+          </el-button>
           <SystemSwitch />
         </div>
         <div class="header-right">
@@ -23,13 +34,29 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { Fold, Expand } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import SystemSwitch from '@/components/layout/SystemSwitch.vue'
 import NotificationBell from '@/components/layout/NotificationBell.vue'
 
 const userStore = useUserStore()
+
+// 侧边栏折叠状态（持久化到 localStorage）
+const sidebarCollapsed = ref(false)
+
+onMounted(() => {
+  const saved = localStorage.getItem('erp_sidebar_collapsed')
+  if (saved === '1') {
+    sidebarCollapsed.value = true
+  }
+})
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  localStorage.setItem('erp_sidebar_collapsed', sidebarCollapsed.value ? '1' : '0')
+}
 
 const roleLabel = computed(() => {
   const map = { admin: '管理员', process: '财务', agent: '业务员' }
@@ -48,7 +75,8 @@ function handleLogout() {
 
 .aside {
   background-color: #304156;
-  overflow-y: auto;
+  overflow: hidden;
+  transition: width 0.28s ease;
 }
 
 .header {
@@ -57,11 +85,23 @@ function handleLogout() {
   justify-content: space-between;
   border-bottom: 1px solid #e6e6e6;
   background: #fff;
+  padding: 0 16px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
+  gap: 12px;
+}
+
+.collapse-btn {
+  padding: 0 8px;
+  height: 40px;
+
+  &:hover {
+    background-color: #f5f7fa;
+    border-radius: 4px;
+  }
 }
 
 .header-right {
