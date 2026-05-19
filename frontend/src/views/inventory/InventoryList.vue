@@ -113,7 +113,7 @@
           :loading="batchSyncLoading"
           @click="handleBatchSync"
         >
-          <el-icon><Refresh /></el-icon>批量更新全量信息
+          <el-icon><Refresh /></el-icon>{{ scanRunning ? '查看进度' : '批量更新全量信息' }}
         </el-button>
         <ExportButton
           path="/export/inventory"
@@ -707,7 +707,8 @@ import {
   changeInventoryStatus,
   changeInventoryPrice,
   batchChangePrice,
-  getAnomalyOverview
+  getAnomalyOverview,
+  getScanProgress
 } from '@/api/inventory'
 import { formatMoney, formatDate } from '@/utils/format'
 import { INVENTORY_STATUS_MAP, RESOURCE_TYPE_MAP } from '@/utils/constants'
@@ -836,6 +837,7 @@ const batchImportRef = ref(null)
 // ===== 批量更新全量信息 =====
 const batchSyncLoading = ref(false)
 const scanProgressRef = ref(null)
+const scanRunning = ref(false)
 
 // ===== 数据拉取 =====
 
@@ -1233,11 +1235,18 @@ function handleBatchImportSuccess() {
 
 /** 批量更新全量信息（打开进度弹窗） */
 async function handleBatchSync() {
-  scanProgressRef.value?.open()
+  if (scanRunning.value) {
+    // 已在运行，直接打开查看进度
+    scanProgressRef.value?.open()
+  } else {
+    // 打开并启动
+    scanProgressRef.value?.openAndStart()
+  }
 }
 
 /** 扫描完成回调 */
 function handleScanDone() {
+  scanRunning.value = false
   fetchList()
   fetchOverview()
   fetchAnomalyCount()
@@ -1263,6 +1272,12 @@ onMounted(() => {
   fetchList()
   fetchOverview()
   fetchAnomalyCount()
+  // 检查是否有正在运行的扫描任务
+  getScanProgress().then(res => {
+    if (res.data?.status === 'running') {
+      scanRunning.value = true
+    }
+  }).catch(() => {})
 })
 </script>
 

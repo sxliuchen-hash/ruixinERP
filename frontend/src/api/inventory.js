@@ -143,6 +143,11 @@ export function getScanProgress() {
   return request.get('/inventory/anomalies/scan-progress')
 }
 
+/** 停止扫描 */
+export function stopAnomalyScan() {
+  return request.post('/inventory/anomalies/scan-stop')
+}
+
 // ============ 聚合接口 ============
 
 /** 库存总览统计 */

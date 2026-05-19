@@ -94,6 +94,7 @@ router.post('/batch-delete',
 router.get('/anomalies', inventoryController.getAnomalies);
 router.get('/anomalies/overview', inventoryController.getAnomalyOverview);
 router.get('/anomalies/scan-progress', inventoryController.getScanProgress);
+router.post('/anomalies/scan-stop', inventoryController.stopScan);
 router.put('/anomalies/:id/resolve',
   operationLog('update', 'patent_anomaly_alerts'),
   inventoryController.resolveAnomaly

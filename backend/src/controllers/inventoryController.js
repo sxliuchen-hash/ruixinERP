@@ -345,6 +345,17 @@ async function getScanProgress(req, res, next) {
   }
 }
 
+/** POST /api/v1/inventory/anomalies/scan-stop - 停止扫描 */
+async function stopScan(req, res, next) {
+  try {
+    const job = require('../jobs/patentBatchQueryJob');
+    await job.requestStop();
+    res.json({ success: true, message: '已发送停止信号，任务将在当前专利处理完后停止' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getList,
   getOverview,
@@ -367,5 +378,6 @@ module.exports = {
   getAnomalyOverview,
   resolveAnomaly,
   triggerAnomalyScan,
-  getScanProgress
+  getScanProgress,
+  stopScan
 };

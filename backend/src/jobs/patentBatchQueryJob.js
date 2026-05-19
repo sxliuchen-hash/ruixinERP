@@ -27,9 +27,11 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 const IP_API_BASE = process.env.IP_API_BASE_URL || 'https://iptt.top/api/v1';
 const PROGRESS_KEY = 'patent_scan_progress';
 const PROGRESS_TTL = 3600; // 1 小时后自动过期
+const STOP_KEY = 'patent_scan_stop';
 
 // 内存备份（Redis 不可用时使用）
 let memoryProgress = null;
+let memoryStop = false;
 
 function generateSystemToken() {
   const systemUser = {
@@ -85,6 +87,42 @@ async function updateProgress(data) {
     await redis.set(PROGRESS_KEY, JSON.stringify(data), 'EX', PROGRESS_TTL);
   } catch (e) {
     // Redis 不可用时使用内存备份
+  }
+}
+
+/**
+ * 检查是否收到停止信号
+ */
+async function shouldStop() {
+  try {
+    const val = await redis.get(STOP_KEY);
+    return val === '1';
+  } catch (e) {
+    return memoryStop;
+  }
+}
+
+/**
+ * 发送停止信号
+ */
+async function requestStop() {
+  memoryStop = true;
+  try {
+    await redis.set(STOP_KEY, '1', 'EX', 300);
+  } catch (e) {
+    // 内存备份已设置
+  }
+}
+
+/**
+ * 清除停止信号
+ */
+async function clearStop() {
+  memoryStop = false;
+  try {
+    await redis.del(STOP_KEY);
+  } catch (e) {
+    // 静默
   }
 }
 
@@ -155,6 +193,9 @@ async function run() {
   progress.total = inventories.length;
   await appendLog(progress, `开始扫描，共 ${inventories.length} 条在库专利`);
 
+  // 清除之前的停止信号
+  await clearStop();
+
   // 2. 生成系统 Token
   const token = generateSystemToken();
 
@@ -162,6 +203,15 @@ async function run() {
 
   for (let i = 0; i < inventories.length; i++) {
     const inv = inventories[i];
+
+    // 检查停止信号
+    if (await shouldStop()) {
+      progress.status = 'stopped';
+      progress.finishedAt = new Date().toISOString();
+      await appendLog(progress, `⏹ 用户手动停止，已完成 ${progress.scanned} 条`, 'warning');
+      logger.info('[PatentBatchQueryJob] 用户手动停止');
+      return { scanned: progress.scanned, alerts: progress.alerts, failed: progress.failed, stopped: true };
+    }
 
     // 每 BATCH_PAUSE_SIZE 条暂停一次
     if (i > 0 && i % BATCH_PAUSE_SIZE === 0) {
@@ -262,4 +312,4 @@ async function run() {
   return { scanned: progress.scanned, alerts: progress.alerts, failed: progress.failed, cost_ms: cost };
 }
 
-module.exports = { run, getProgress };
+module.exports = { run, getProgress, requestStop };
