@@ -91,6 +91,16 @@ export function deleteAnnualFee(id, feeId) {
   return request.delete(`/inventory/${id}/fees/${feeId}`)
 }
 
+// ============ IP 系统数据同步 ============
+
+/**
+ * 从 IP 系统同步专利信息（名称/类型/截止日）到本地库存
+ * @param {number} id 库存 ID
+ */
+export function syncFromIpSystem(id) {
+  return request.post(`/inventory/${id}/sync-from-ip`)
+}
+
 // ============ 聚合接口 ============
 
 /** 库存总览统计 */

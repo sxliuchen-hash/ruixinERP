@@ -32,6 +32,12 @@
         </h3>
       </div>
       <div class="header-actions" v-if="detail">
+        <el-button type="primary" :loading="ipFeeLoading" @click="fetchIpFeeDetail">
+          <el-icon><Refresh /></el-icon>更新年费
+        </el-button>
+        <el-button type="primary" plain :loading="syncLoading" @click="handleSyncFromIp">
+          <el-icon><Connection /></el-icon>同步专利信息
+        </el-button>
         <el-button type="success" @click="openPriceDialog">
           <el-icon><Money /></el-icon>调价
         </el-button>
@@ -515,7 +521,8 @@ import {
   changeInventoryStatus,
   changeInventoryPrice,
   addAnnualFee,
-  deleteAnnualFee
+  deleteAnnualFee,
+  syncFromIpSystem
 } from '@/api/inventory'
 import { getPatentFeeDetail } from '@/api/patentFee'
 import { formatMoney, formatDate } from '@/utils/format'
@@ -563,6 +570,9 @@ const ipFeeLoaded = ref(false)
 const ipFeeData = ref(null)
 const ipFeeError = ref('')
 
+// ===== IP 系统专利信息同步 =====
+const syncLoading = ref(false)
+
 // ===== 数据拉取 =====
 
 async function fetchDetail() {
@@ -588,11 +598,50 @@ async function fetchIpFeeDetail() {
     const res = await getPatentFeeDetail(detail.value.patent_no)
     ipFeeData.value = res.data || null
     ipFeeLoaded.value = true
+    ElMessage.success('年费数据已更新')
   } catch (e) {
     ipFeeError.value = e?.response?.data?.message || e?.message || '获取 IP 系统年费信息失败'
     ipFeeLoaded.value = true
+    ElMessage.error(ipFeeError.value)
   } finally {
     ipFeeLoading.value = false
+  }
+}
+
+/** 从 IP 系统同步专利信息（名称、类型、截止日）到本地库存 */
+async function handleSyncFromIp() {
+  if (!detail.value?.id) return
+
+  try {
+    await ElMessageBox.confirm(
+      '将从 IP 系统获取该专利的最新信息（名称、类型、年费截止日等）并更新到 ERP 库存。继续吗？',
+      '同步专利信息',
+      { type: 'info', confirmButtonText: '开始同步' }
+    )
+  } catch (e) {
+    return // 用户取消
+  }
+
+  syncLoading.value = true
+  try {
+    const res = await syncFromIpSystem(detail.value.id)
+    const result = res.data || {}
+    // 同时刷新本地详情和 IP 数据
+    if (result.ipData) {
+      ipFeeData.value = result.ipData
+      ipFeeLoaded.value = true
+    }
+    if (result.updated > 0) {
+      ElMessage.success(`同步成功，已更新 ${result.updated} 个字段：${(result.synced || []).join('、')}`)
+    } else {
+      ElMessage.info('数据已是最新，无需更新')
+    }
+    fetchDetail() // 刷新本地展示
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '同步失败'
+    ElMessage.error(msg)
+  } finally {
+    syncLoading.value = false
   }
 }
 

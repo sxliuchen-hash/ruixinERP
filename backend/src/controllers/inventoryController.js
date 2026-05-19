@@ -167,6 +167,39 @@ async function deleteAnnualFee(req, res, next) {
   }
 }
 
+/** POST /api/v1/inventory/:id/sync-from-ip - 从 IP 系统同步专利信息 */
+async function syncFromIpSystem(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { id: userId, role: userRole } = req.user;
+
+    // 先获取库存记录拿到 patent_no
+    const inv = await inventoryService.getDetail(parseInt(id, 10));
+
+    // 调用 IP 系统获取最新数据
+    const ipSystemService = require('../services/ipSystemService');
+    const ipData = await ipSystemService.getPatentFeeDetail(inv.patent_no, req);
+
+    // 同步到本地
+    const result = await inventoryService.syncFromIpSystem(
+      parseInt(id, 10),
+      ipData,
+      userId,
+      userRole
+    );
+
+    res.json({
+      success: true,
+      message: result.updated > 0
+        ? `同步成功，更新了 ${result.updated} 个字段`
+        : '数据已是最新',
+      data: { ...result, ipData }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 /** GET /api/v1/inventory/batch-import/template - 下载批量入库模板 */
 async function batchImportTemplate(req, res, next) {
   try {
@@ -229,6 +262,7 @@ module.exports = {
   batchChangePrice,
   addAnnualFee,
   deleteAnnualFee,
+  syncFromIpSystem,
   batchImportTemplate,
   batchImportValidate,
   batchImportExecute

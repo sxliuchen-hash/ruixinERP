@@ -478,6 +478,71 @@ class InventoryService {
   }
 
   /**
+   * 从 IP 系统同步专利信息到本地库存
+   *
+   * 同步内容：
+   *   - patent_name        从 IP 系统的 patentName 更新
+   *   - patent_type        从 IP 系统的 patentType 更新
+   *   - next_fee_deadline  从 IP 系统的 nextFeeDeadline 更新（仅当本地未维护时）
+   *
+   * @param {number} inventoryId
+   * @param {Object} ipData - IP 系统返回的年费详情数据
+   * @param {number} userId
+   * @param {string} userRole
+   */
+  async syncFromIpSystem(inventoryId, ipData, userId, userRole) {
+    const inv = await PatentInventory.findByPk(inventoryId);
+    if (!inv) throw new NotFoundError('库存记录不存在');
+
+    if (userRole === 'agent' && inv.created_by !== userId) {
+      throw new ValidationError('无权同步该库存数据');
+    }
+
+    if (!ipData || !ipData.patent) {
+      throw new ValidationError('IP 系统数据格式异常');
+    }
+
+    const updates = {};
+    const synced = [];
+
+    // 同步专利名称（仅在本地为空或与专利号相同时才覆盖）
+    const ipName = ipData.patent.patentName;
+    if (ipName && (!inv.patent_name || inv.patent_name === inv.patent_no)) {
+      updates.patent_name = ipName;
+      synced.push('patent_name');
+    }
+
+    // 同步专利类型
+    const ipType = ipData.patent.patentType;
+    if (ipType && !inv.patent_type) {
+      updates.patent_type = ipType;
+      synced.push('patent_type');
+    }
+
+    // 同步下次年费截止日（IP 系统数据更权威）
+    const ipDeadline = ipData.patent.nextFeeDeadline;
+    if (ipDeadline && ipDeadline !== inv.next_fee_deadline) {
+      updates.next_fee_deadline = ipDeadline;
+      synced.push('next_fee_deadline');
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await inv.update(updates);
+    }
+
+    return {
+      synced,
+      updated: Object.keys(updates).length,
+      patent: {
+        patent_no: inv.patent_no,
+        patent_name: updates.patent_name || inv.patent_name,
+        patent_type: updates.patent_type || inv.patent_type,
+        next_fee_deadline: updates.next_fee_deadline || inv.next_fee_deadline
+      }
+    };
+  }
+
+  /**
    * 库存总览统计
    *
    * 返回：

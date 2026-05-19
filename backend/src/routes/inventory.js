@@ -129,4 +129,10 @@ router.delete('/:id/fees/:feeId',
   inventoryController.deleteAnnualFee
 );
 
+// ===== IP 系统数据同步 =====
+router.post('/:id/sync-from-ip',
+  operationLog('update', 'patent_inventory'),
+  inventoryController.syncFromIpSystem
+);
+
 module.exports = router;
