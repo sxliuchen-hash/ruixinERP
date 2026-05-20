@@ -107,6 +107,7 @@ class IpSystemService {
 
   /**
    * 获取单个专利的年费详情（含应缴/已缴/发文/质押/许可/变更）
+   * 优先使用代查接口（支持任意专利号），降级到 patent-fee/detail
    * @param {string} patentNo - 专利号
    * @param {import('express').Request} req - Express 请求对象（用于提取 Token）
    * @returns {Promise<Object>} 年费详情数据
@@ -115,6 +116,19 @@ class IpSystemService {
     const token = this._extractToken(req);
     const client = this._createClient(token);
 
+    // 优先尝试代查接口（支持任意专利号）
+    try {
+      const response = await client.post('/patent-query/detail', { patentNo }, { timeout: 45000 });
+      const result = this._handleResponse(response);
+      if (result) return result;
+    } catch (e) {
+      // 代查接口不可用时降级到旧接口
+      if (e.statusCode !== 404) {
+        // 如果不是 404，可能是代查接口还没部署，尝试旧接口
+      }
+    }
+
+    // 降级：尝试旧接口（只能查 IP 系统已录入的专利）
     try {
       const response = await client.get(`/patent-fee/detail/${encodeURIComponent(patentNo)}`);
       return this._handleResponse(response);

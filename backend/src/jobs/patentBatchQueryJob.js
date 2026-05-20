@@ -46,25 +46,31 @@ function generateSystemToken() {
 }
 
 async function fetchIpPatentDetail(patentNo, token) {
-  const response = await axios.get(
-    `${IP_API_BASE}/patent-fee/detail/${encodeURIComponent(patentNo)}`,
+  // 使用代查接口（POST），支持查询任意专利号
+  const response = await axios.post(
+    `${IP_API_BASE}/patent-query/detail`,
+    { patentNo },
     {
       headers: { 'Authorization': `Bearer ${token}` },
-      timeout: 15000,
-      validateStatus: (status) => status < 500 // 4xx 不抛异常
+      timeout: 45000, // 首次查询国知局需要 15-30 秒
+      validateStatus: (status) => status < 500
     }
   );
   if (response.data?.code === 200) {
     return response.data.data;
   }
   if (response.status === 404 || response.data?.code === 404) {
-    return null; // 专利未在 IP 系统录入，不算错误
+    return null; // 国知局查不到该专利
+  }
+  if (response.status === 503 || response.data?.code === 503) {
+    throw new Error('国知局查询服务暂时不可用');
   }
   throw new Error(response.data?.message || `IP 系统返回 ${response.status}`);
 }
 
 /**
- * 调用 IP 系统获取专利基本信息（含 patent_details）
+ * 调用 IP 系统获取专利基本信息（按专利号查 patents 表）
+ * 注意：此接口只能查 IP 系统已录入的专利，查不到返回 null
  */
 async function fetchIpPatentInfo(patentNo, token) {
   const response = await axios.get(
@@ -78,7 +84,7 @@ async function fetchIpPatentInfo(patentNo, token) {
   if (response.data?.code === 200) {
     return response.data.data;
   }
-  return null; // 404 或其他非严重错误
+  return null;
 }
 
 function sleep(ms) {
@@ -232,9 +238,9 @@ async function run() {
       const ipFeeData = await fetchIpPatentDetail(inv.patent_no, token);
 
       if (!ipFeeData) {
-        // 专利未在 IP 系统录入，跳过（不算失败）
+        // 国知局查不到该专利号
         progress.scanned++;
-        await appendLog(progress, `[${i + 1}/${inventories.length}] ${inv.patent_no} - IP 系统未录入，跳过`, 'info');
+        await appendLog(progress, `[${i + 1}/${inventories.length}] ${inv.patent_no} - 国知局未收录，跳过`, 'info');
         consecutiveFailures = 0;
         await sleep(REQUEST_INTERVAL_MS);
         continue;
