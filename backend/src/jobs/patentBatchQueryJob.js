@@ -34,26 +34,10 @@ let memoryProgress = null;
 let memoryStop = false;
 
 /**
- * 通过登录接口获取 Token（IP 系统需要真实登录）
- * 优先使用 IP_SERVICE_USERNAME/PASSWORD，否则降级自签 JWT
+ * 生成系统 Token（ERP 与 IP 系统共用 JWT_SECRET 和 users 表）
+ * 自签的 Token 在 IP 系统同样有效
  */
-async function getServiceToken() {
-  const username = process.env.IP_SERVICE_USERNAME || '';
-  const password = process.env.IP_SERVICE_PASSWORD || '';
-
-  if (username && password) {
-    try {
-      const response = await axios.post(`${IP_API_BASE}/auth/login`, { username, password });
-      if (response.data?.code === 200 && response.data?.data?.token) {
-        return response.data.data.token;
-      }
-      throw new Error(response.data?.message || '登录失败');
-    } catch (e) {
-      logger.error('[PatentBatchQueryJob] IP 系统登录失败:', e.message);
-    }
-  }
-
-  // 降级：自签 JWT（共用 JWT_SECRET 时可用）
+function generateSystemToken() {
   return jwt.sign(
     { id: parseInt(process.env.IP_SYSTEM_USER_ID, 10) || 1, username: 'system', role: 'admin' },
     process.env.JWT_SECRET,
@@ -219,17 +203,9 @@ async function run() {
   // 清除之前的停止信号
   await clearStop();
 
-  // 2. 获取 Token（通过登录或自签）
-  let token;
-  try {
-    token = await getServiceToken();
-    await appendLog(progress, 'IP 系统认证成功');
-  } catch (e) {
-    progress.status = 'completed';
-    progress.finishedAt = new Date().toISOString();
-    await appendLog(progress, `IP 系统认证失败: ${e.message}`, 'error');
-    return { scanned: 0, alerts: 0, failed: 0 };
-  }
+  // 2. 生成系统 Token（共用 JWT_SECRET，自签即可）
+  const token = generateSystemToken();
+  await appendLog(progress, '认证 Token 已生成');
 
   let consecutiveFailures = 0;
 
