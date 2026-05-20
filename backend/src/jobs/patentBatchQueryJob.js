@@ -24,7 +24,7 @@ const FAILURE_PAUSE_MS = 60000;
 const BATCH_PAUSE_SIZE = 20;
 const BATCH_PAUSE_MS = 30000;
 const MAX_CONSECUTIVE_FAILURES = 3;
-const IP_API_BASE = process.env.IP_API_BASE_URL || 'https://iptt.top/api/v1';
+const IP_API_BASE = process.env.IP_API_BASE_URL || 'http://127.0.0.1:3000/api/v1';
 const PROGRESS_KEY = 'patent_scan_progress';
 const PROGRESS_TTL = 3600; // 1 小时后自动过期
 const STOP_KEY = 'patent_scan_stop';
@@ -33,13 +33,32 @@ const STOP_KEY = 'patent_scan_stop';
 let memoryProgress = null;
 let memoryStop = false;
 
-function generateSystemToken() {
-  const systemUser = {
-    id: parseInt(process.env.IP_SYSTEM_USER_ID, 10) || 1,
-    username: process.env.IP_SYSTEM_USERNAME || 'system',
-    role: 'admin'
-  };
-  return jwt.sign(systemUser, process.env.JWT_SECRET, { expiresIn: '2h' });
+/**
+ * 通过登录接口获取 Token（IP 系统需要真实登录）
+ * 优先使用 IP_SERVICE_USERNAME/PASSWORD，否则降级自签 JWT
+ */
+async function getServiceToken() {
+  const username = process.env.IP_SERVICE_USERNAME || '';
+  const password = process.env.IP_SERVICE_PASSWORD || '';
+
+  if (username && password) {
+    try {
+      const response = await axios.post(`${IP_API_BASE}/auth/login`, { username, password });
+      if (response.data?.code === 200 && response.data?.data?.token) {
+        return response.data.data.token;
+      }
+      throw new Error(response.data?.message || '登录失败');
+    } catch (e) {
+      logger.error('[PatentBatchQueryJob] IP 系统登录失败:', e.message);
+    }
+  }
+
+  // 降级：自签 JWT（共用 JWT_SECRET 时可用）
+  return jwt.sign(
+    { id: parseInt(process.env.IP_SYSTEM_USER_ID, 10) || 1, username: 'system', role: 'admin' },
+    process.env.JWT_SECRET,
+    { expiresIn: '2h' }
+  );
 }
 
 async function fetchIpPatentDetail(patentNo, token) {
@@ -47,13 +66,17 @@ async function fetchIpPatentDetail(patentNo, token) {
     `${IP_API_BASE}/patent-fee/detail/${encodeURIComponent(patentNo)}`,
     {
       headers: { 'Authorization': `Bearer ${token}` },
-      timeout: 15000
+      timeout: 15000,
+      validateStatus: (status) => status < 500 // 4xx 不抛异常
     }
   );
   if (response.data?.code === 200) {
     return response.data.data;
   }
-  throw new Error(response.data?.message || 'IP 系统返回非 200');
+  if (response.status === 404 || response.data?.code === 404) {
+    return null; // 专利未在 IP 系统录入，不算错误
+  }
+  throw new Error(response.data?.message || `IP 系统返回 ${response.status}`);
 }
 
 /**
@@ -64,14 +87,14 @@ async function fetchIpPatentInfo(patentNo, token) {
     `${IP_API_BASE}/patents/no/${encodeURIComponent(patentNo)}`,
     {
       headers: { 'Authorization': `Bearer ${token}` },
-      timeout: 15000
+      timeout: 15000,
+      validateStatus: (status) => status < 500
     }
   );
   if (response.data?.code === 200) {
     return response.data.data;
   }
-  // 这个接口可能对某些专利返回 404，不算严重错误
-  return null;
+  return null; // 404 或其他非严重错误
 }
 
 function sleep(ms) {
@@ -196,8 +219,17 @@ async function run() {
   // 清除之前的停止信号
   await clearStop();
 
-  // 2. 生成系统 Token
-  const token = generateSystemToken();
+  // 2. 获取 Token（通过登录或自签）
+  let token;
+  try {
+    token = await getServiceToken();
+    await appendLog(progress, 'IP 系统认证成功');
+  } catch (e) {
+    progress.status = 'completed';
+    progress.finishedAt = new Date().toISOString();
+    await appendLog(progress, `IP 系统认证失败: ${e.message}`, 'error');
+    return { scanned: 0, alerts: 0, failed: 0 };
+  }
 
   let consecutiveFailures = 0;
 
@@ -222,6 +254,15 @@ async function run() {
     try {
       // 1) 调用年费详情接口（含应缴/已缴/发文/质押/许可/变更）
       const ipFeeData = await fetchIpPatentDetail(inv.patent_no, token);
+
+      if (!ipFeeData) {
+        // 专利未在 IP 系统录入，跳过（不算失败）
+        progress.scanned++;
+        await appendLog(progress, `[${i + 1}/${inventories.length}] ${inv.patent_no} - IP 系统未录入，跳过`, 'info');
+        consecutiveFailures = 0;
+        await sleep(REQUEST_INTERVAL_MS);
+        continue;
+      }
 
       // 间隔后调用第二个接口
       await sleep(REQUEST_INTERVAL_MS);

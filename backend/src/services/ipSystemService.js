@@ -25,8 +25,8 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 const { AppError } = require('../utils/errors');
 
-// IP 系统 API 基础地址
-const IP_API_BASE = process.env.IP_API_BASE_URL || 'https://iptt.top/api/v1';
+// IP 系统 API 基础地址（同服务器优先用内网）
+const IP_API_BASE = process.env.IP_API_BASE_URL || 'http://127.0.0.1:3000/api/v1';
 
 // 请求超时（毫秒）
 const REQUEST_TIMEOUT = 15000;
