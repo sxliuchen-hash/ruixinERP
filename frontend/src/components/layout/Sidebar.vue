@@ -47,7 +47,8 @@
           <el-icon><Box /></el-icon>
           <span>专利库存</span>
         </template>
-        <el-menu-item index="/inventory">库存列表</el-menu-item>
+        <el-menu-item index="/inventory">库存管理</el-menu-item>
+        <el-menu-item index="/inventory/sold-analytics">已售统计</el-menu-item>
         <el-menu-item index="/inventory/anomalies">
           <el-icon><Warning /></el-icon>
           <span>异常告警</span>
@@ -117,6 +118,7 @@ const activeMenu = computed(() => {
   if (path.match(/^\/contracts\/\d+/)) return '/contracts'
   if (path.match(/^\/projects\/\d+/)) return '/projects'
   if (path === '/inventory/anomalies') return '/inventory/anomalies'
+  if (path === '/inventory/sold-analytics') return '/inventory/sold-analytics'
   if (path.match(/^\/inventory\/\d+/)) return '/inventory'
   return path
 })

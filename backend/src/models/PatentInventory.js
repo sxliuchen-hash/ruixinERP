@@ -123,6 +123,34 @@ const PatentInventory = sequelize.define('PatentInventory', {
     type: DataTypes.DATEONLY,
     comment: '出库日期（status=sold 时记录）'
   },
+  sold_time: {
+    type: DataTypes.DATE,
+    comment: '成交时间'
+  },
+  sold_price: {
+    type: DataTypes.DECIMAL(12, 2),
+    comment: '成交价格'
+  },
+  buyer_name: {
+    type: DataTypes.STRING(100),
+    comment: '买家名称'
+  },
+  buyer_contact: {
+    type: DataTypes.STRING(100),
+    comment: '买家联系方式'
+  },
+  sale_contract_id: {
+    type: DataTypes.INTEGER,
+    comment: '关联销售合同ID'
+  },
+  sale_remark: {
+    type: DataTypes.TEXT,
+    comment: '销售备注'
+  },
+  actual_profit: {
+    type: DataTypes.DECIMAL(12, 2),
+    comment: '实际利润(成交价-采购价-维护成本)'
+  },
   remark: {
     type: DataTypes.TEXT,
     comment: '备注'
@@ -147,7 +175,8 @@ const PatentInventory = sequelize.define('PatentInventory', {
     { fields: ['supplier_id'] },
     { fields: ['project_id'] },
     { fields: ['next_fee_deadline'] },
-    { fields: ['tech_field'] }
+    { fields: ['tech_field'] },
+    { fields: ['sold_time'] }
   ]
 });
 

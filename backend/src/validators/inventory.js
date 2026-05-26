@@ -137,6 +137,48 @@ const expiringQuerySchema = Joi.object({
   days: Joi.number().integer().min(1).max(365).default(60)
 });
 
+/**
+ * 标记已售
+ */
+const markAsSoldSchema = Joi.object({
+  sold_price: Joi.number().min(0).required().messages({
+    'any.required': '成交价格不能为空'
+  }),
+  buyer_name: Joi.string().max(100).required().messages({
+    'any.required': '买家名称不能为空'
+  }),
+  sold_time: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/).allow('', null).messages({
+    'string.pattern.base': '成交时间格式错误，应为 YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss'
+  }),
+  buyer_contact: Joi.string().max(100).allow('', null),
+  sale_contract_id: Joi.number().integer().allow(null),
+  sale_remark: Joi.string().allow('', null)
+});
+
+/**
+ * 已售归档列表查询
+ */
+const soldListQuerySchema = Joi.object({
+  keyword: Joi.string().max(200).allow('', null),
+  buyer_name: Joi.string().max(100).allow('', null),
+  resource_type: Joi.string().valid(...RESOURCE_TYPES).allow('', null),
+  sold_time_start: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
+  sold_time_end: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
+  profit_type: Joi.string().valid('positive', 'negative').allow('', null),
+  sort: Joi.string().valid('profit', 'price', 'time').allow('', null),
+  order: Joi.string().valid('asc', 'desc').allow('', null),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100),
+  pageSize: Joi.number().integer().min(1).max(100)
+});
+
+/**
+ * 已售统计分析查询
+ */
+const soldAnalyticsQuerySchema = Joi.object({
+  period: Joi.string().valid('month', 'quarter', 'year').default('month')
+});
+
 module.exports = {
   createInventorySchema,
   updateInventorySchema,
@@ -145,5 +187,8 @@ module.exports = {
   changePriceSchema,
   batchChangePriceSchema,
   createAnnualFeeSchema,
-  expiringQuerySchema
+  expiringQuerySchema,
+  markAsSoldSchema,
+  soldListQuerySchema,
+  soldAnalyticsQuerySchema
 };

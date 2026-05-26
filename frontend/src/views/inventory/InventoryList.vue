@@ -101,6 +101,9 @@
         <el-button type="warning" @click="openExpiringDrawer">
           <el-icon><Bell /></el-icon>到期预警
         </el-button>
+        <el-button type="success" plain @click="goSoldAnalytics">
+          <el-icon><TrendCharts /></el-icon>已售统计
+        </el-button>
         <el-badge :value="anomalyCount.danger" :hidden="!anomalyCount.danger" type="danger">
           <el-button type="danger" plain @click="goAnomalyPage">
             <el-icon><Warning /></el-icon>异常告警
@@ -688,13 +691,16 @@
 
     <!-- ===== 批量扫描进度弹窗 ===== -->
     <ScanProgressDialog ref="scanProgressRef" @done="handleScanDone" />
+
+    <!-- ===== 标记已售弹窗 ===== -->
+    <MarkAsSoldDialog ref="markSoldRef" @success="handleMarkSoldSuccess" />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Money, Bell, ArrowDown, Delete, Warning, Refresh } from '@element-plus/icons-vue'
+import { Search, Plus, Money, Bell, ArrowDown, Delete, Warning, Refresh, TrendCharts } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getInventoryList,
@@ -718,6 +724,7 @@ import ContractSelect from '@/components/business/ContractSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
 import BatchImportDialog from './BatchImportDialog.vue'
 import ScanProgressDialog from './ScanProgressDialog.vue'
+import MarkAsSoldDialog from './MarkAsSoldDialog.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -839,6 +846,15 @@ const batchSyncLoading = ref(false)
 const scanProgressRef = ref(null)
 const scanRunning = ref(false)
 
+// ===== 标记已售 =====
+const markSoldRef = ref(null)
+
+/** 标记已售成功后刷新 */
+function handleMarkSoldSuccess() {
+  fetchList()
+  fetchOverview()
+}
+
 // ===== 数据拉取 =====
 
 async function fetchList() {
@@ -891,6 +907,11 @@ async function fetchAnomalyCount() {
 /** 跳转到异常告警页 */
 function goAnomalyPage() {
   router.push('/inventory/anomalies')
+}
+
+/** 跳转到已售统计页 */
+function goSoldAnalytics() {
+  router.push('/inventory/sold-analytics')
 }
 
 async function fetchExpiring() {
@@ -1108,14 +1129,16 @@ async function handleBatchDelete() {
 
 // 状态变更（下拉菜单）
 async function handleStatusCommand(row, command) {
+  // 标记已售走专用弹窗（需填写完整销售信息）
+  if (command === 'sold') {
+    markSoldRef.value?.open(row)
+    return
+  }
+
   const statusLabel = INVENTORY_STATUS_MAP[command]?.label || command
   try {
     await ElMessageBox.confirm(`确定将该专利状态变更为"${statusLabel}"？`, '提示', { type: 'warning' })
-    const data = { status: command }
-    if (command === 'sold') {
-      data.stock_out_date = new Date().toISOString().slice(0, 10)
-    }
-    await changeInventoryStatus(row.id, data)
+    await changeInventoryStatus(row.id, { status: command })
     ElMessage.success('状态变更成功')
     fetchList()
     fetchOverview()

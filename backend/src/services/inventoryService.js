@@ -65,7 +65,13 @@ class InventoryService {
       where.created_by = userId;
     }
 
-    if (status) where.status = status;
+    // 已售专利归档到独立的"已售统计"页面，主库存列表默认不展示
+    // 如果显式传入 status 过滤，则按用户意图返回（兼容旧行为）
+    if (status) {
+      where.status = status;
+    } else {
+      where.status = { [Op.ne]: 'sold' };
+    }
     if (resource_type) where.resource_type = resource_type;
     if (agent_id) where.agent_id = parseInt(agent_id, 10);
     if (tech_field) where.tech_field = { [Op.like]: `%${tech_field}%` };
@@ -707,6 +713,348 @@ class InventoryService {
       current_price: parseFloat(r.current_price || 0),
       total_maintain_cost: parseFloat(r.total_maintain_cost || 0)
     }));
+  }
+
+  // ==================== 已售归档 ====================
+
+  /**
+   * 标记已售（填写销售详情）
+   *
+   * @param {number} id - 库存记录 ID
+   * @param {Object} saleData - 销售信息
+   * @param {number} saleData.sold_price - 成交价格（必填）
+   * @param {string} saleData.buyer_name - 买家名称（必填）
+   * @param {string} [saleData.sold_time] - 成交时间
+   * @param {string} [saleData.buyer_contact] - 买家联系方式
+   * @param {number} [saleData.sale_contract_id] - 关联销售合同
+   * @param {string} [saleData.sale_remark] - 销售备注
+   * @param {number} userId
+   * @param {string} userRole
+   */
+  async markAsSold(id, saleData, userId, userRole) {
+    const inv = await PatentInventory.findByPk(id);
+    if (!inv) throw new NotFoundError('库存记录不存在');
+
+    if (userRole === 'agent' && inv.created_by !== userId) {
+      throw new ValidationError('无权操作该库存记录');
+    }
+
+    if (inv.status !== 'in_stock' && inv.status !== 'transferring') {
+      throw new ValidationError(`当前状态为"${inv.status}"，不允许标记已售`);
+    }
+
+    const soldPrice = parseFloat(saleData.sold_price);
+    if (!(soldPrice >= 0)) {
+      throw new ValidationError('成交价格必须 >= 0');
+    }
+    if (!saleData.buyer_name || !saleData.buyer_name.trim()) {
+      throw new ValidationError('买家名称不能为空');
+    }
+
+    // 计算实际利润
+    const purchasePrice = parseFloat(inv.purchase_price) || 0;
+    const maintainCost = parseFloat(inv.total_maintain_cost) || 0;
+    const actualProfit = parseFloat((soldPrice - purchasePrice - maintainCost).toFixed(2));
+
+    const soldTime = saleData.sold_time || new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const stockOutDate = saleData.sold_time
+      ? saleData.sold_time.slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+    // 校验关联合同
+    if (saleData.sale_contract_id) {
+      const ct = await Contract.findByPk(saleData.sale_contract_id);
+      if (!ct) throw new NotFoundError('关联销售合同不存在');
+    }
+
+    await inv.update({
+      status: 'sold',
+      stock_out_date: stockOutDate,
+      sold_time: soldTime,
+      sold_price: soldPrice,
+      buyer_name: saleData.buyer_name.trim(),
+      buyer_contact: saleData.buyer_contact || null,
+      sale_contract_id: saleData.sale_contract_id || null,
+      sale_remark: saleData.sale_remark || null,
+      actual_profit: actualProfit
+    });
+
+    return await PatentInventory.findByPk(id, {
+      include: [
+        { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
+        { model: Contract, as: 'contract', attributes: ['id', 'contract_no', 'title'] },
+        { model: Contract, as: 'sale_contract', attributes: ['id', 'contract_no', 'title'] }
+      ]
+    });
+  }
+
+  /**
+   * 撤销已售（恢复为在库）
+   * 仅 admin / process 可操作
+   */
+  async unsell(id, userId, userRole) {
+    if (userRole === 'agent') {
+      throw new ValidationError('业务员无权撤销已售状态');
+    }
+
+    const inv = await PatentInventory.findByPk(id);
+    if (!inv) throw new NotFoundError('库存记录不存在');
+
+    if (inv.status !== 'sold') {
+      throw new ValidationError('该记录不是已售状态，无法撤销');
+    }
+
+    await inv.update({
+      status: 'in_stock',
+      stock_out_date: null,
+      sold_time: null,
+      sold_price: null,
+      buyer_name: null,
+      buyer_contact: null,
+      sale_contract_id: null,
+      sale_remark: null,
+      actual_profit: null
+    });
+
+    return inv;
+  }
+
+  /**
+   * 已售归档列表（分页 + 筛选）
+   */
+  async getSoldList(query, userId, userRole) {
+    const { page, limit, offset } = parsePagination(query);
+    const where = { status: 'sold' };
+
+    if (userRole === 'agent') {
+      where.created_by = userId;
+    }
+
+    // 筛选条件
+    if (query.keyword) {
+      where[Op.or] = [
+        { patent_no: { [Op.like]: `%${query.keyword}%` } },
+        { patent_name: { [Op.like]: `%${query.keyword}%` } },
+        { buyer_name: { [Op.like]: `%${query.keyword}%` } }
+      ];
+    }
+    if (query.buyer_name) {
+      where.buyer_name = { [Op.like]: `%${query.buyer_name}%` };
+    }
+    if (query.resource_type) {
+      where.resource_type = query.resource_type;
+    }
+    if (query.sold_time_start && query.sold_time_end) {
+      where.sold_time = { [Op.between]: [query.sold_time_start, query.sold_time_end + ' 23:59:59'] };
+    } else if (query.sold_time_start) {
+      where.sold_time = { [Op.gte]: query.sold_time_start };
+    } else if (query.sold_time_end) {
+      where.sold_time = { [Op.lte]: query.sold_time_end + ' 23:59:59' };
+    }
+    if (query.profit_type === 'positive') {
+      where.actual_profit = { [Op.gt]: 0 };
+    } else if (query.profit_type === 'negative') {
+      where.actual_profit = { [Op.lt]: 0 };
+    }
+
+    // 排序
+    let orderClause = [['sold_time', 'DESC']];
+    if (query.sort === 'profit') {
+      orderClause = [['actual_profit', query.order === 'asc' ? 'ASC' : 'DESC']];
+    } else if (query.sort === 'price') {
+      orderClause = [['sold_price', query.order === 'asc' ? 'ASC' : 'DESC']];
+    } else if (query.sort === 'time') {
+      orderClause = [['sold_time', query.order === 'asc' ? 'ASC' : 'DESC']];
+    }
+
+    const data = await PatentInventory.findAndCountAll({
+      where,
+      include: [
+        { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
+        { model: Supplier, as: 'agent', attributes: ['id', 'name'] },
+        { model: Contract, as: 'contract', attributes: ['id', 'contract_no', 'title'] },
+        { model: Contract, as: 'sale_contract', attributes: ['id', 'contract_no', 'title'] }
+      ],
+      order: orderClause,
+      offset,
+      limit
+    });
+
+    // 附加持有天数
+    const list = data.rows.map(inv => {
+      const obj = typeof inv.toJSON === 'function' ? inv.toJSON() : { ...inv };
+      if (obj.stock_in_date && obj.sold_time) {
+        const inDate = new Date(obj.stock_in_date).getTime();
+        const outDate = new Date(obj.sold_time).getTime();
+        obj.holding_days = Math.max(0, Math.round((outDate - inDate) / (24 * 3600 * 1000)));
+      } else {
+        obj.holding_days = null;
+      }
+      return obj;
+    });
+
+    return {
+      list,
+      pagination: {
+        page,
+        limit,
+        total: data.count,
+        totalPages: Math.ceil(data.count / limit)
+      }
+    };
+  }
+
+  /**
+   * 已售统计摘要（卡片数据）
+   */
+  async getSoldStats(userId, userRole) {
+    let userFilter = '';
+    const replacements = {};
+    if (userRole === 'agent') {
+      userFilter = 'AND created_by = :userId';
+      replacements.userId = userId;
+    }
+
+    const [stats] = await sequelize.query(
+      `SELECT
+         COUNT(*) AS total_sold,
+         COALESCE(SUM(sold_price), 0) AS total_revenue,
+         COALESCE(SUM(actual_profit), 0) AS total_profit,
+         COALESCE(AVG(actual_profit), 0) AS avg_profit,
+         COALESCE(AVG(DATEDIFF(sold_time, stock_in_date)), 0) AS avg_holding_days,
+         COUNT(CASE WHEN actual_profit < 0 THEN 1 END) AS loss_count,
+         COUNT(CASE WHEN sold_time >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN 1 END) AS month_sold,
+         COALESCE(SUM(CASE WHEN sold_time >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN sold_price ELSE 0 END), 0) AS month_revenue
+       FROM patent_inventory
+       WHERE status = 'sold' ${userFilter}`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+
+    return {
+      total_sold: parseInt(stats.total_sold, 10),
+      total_revenue: parseFloat(parseFloat(stats.total_revenue).toFixed(2)),
+      total_profit: parseFloat(parseFloat(stats.total_profit).toFixed(2)),
+      avg_profit: parseFloat(parseFloat(stats.avg_profit).toFixed(2)),
+      avg_holding_days: Math.round(parseFloat(stats.avg_holding_days) || 0),
+      loss_count: parseInt(stats.loss_count, 10),
+      profit_rate: stats.total_revenue > 0
+        ? parseFloat((stats.total_profit / stats.total_revenue * 100).toFixed(1))
+        : 0,
+      month_sold: parseInt(stats.month_sold, 10),
+      month_revenue: parseFloat(parseFloat(stats.month_revenue).toFixed(2))
+    };
+  }
+
+  /**
+   * 已售统计分析（图表数据）
+   *
+   * @param {Object} query
+   * @param {string} [query.period='month'] - 统计周期 month/quarter/year
+   */
+  async getSoldAnalytics(query, userId, userRole) {
+    const period = query.period || 'month';
+    let userFilter = '';
+    const replacements = {};
+    if (userRole === 'agent') {
+      userFilter = 'AND created_by = :userId';
+      replacements.userId = userId;
+    }
+
+    // 1. 月度趋势（近12个月）
+    const trendSql = `
+      SELECT
+        DATE_FORMAT(sold_time, '%Y-%m') AS month,
+        COUNT(*) AS count,
+        COALESCE(SUM(sold_price), 0) AS revenue,
+        COALESCE(SUM(actual_profit), 0) AS profit
+      FROM patent_inventory
+      WHERE status = 'sold'
+        AND sold_time >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+        ${userFilter}
+      GROUP BY DATE_FORMAT(sold_time, '%Y-%m')
+      ORDER BY month ASC
+    `;
+    const trend = await sequelize.query(trendSql, {
+      replacements, type: QueryTypes.SELECT
+    });
+
+    // 2. 按资源类型分组
+    const byTypeSql = `
+      SELECT
+        resource_type,
+        COUNT(*) AS count,
+        COALESCE(SUM(sold_price), 0) AS revenue,
+        COALESCE(SUM(actual_profit), 0) AS profit
+      FROM patent_inventory
+      WHERE status = 'sold' ${userFilter}
+      GROUP BY resource_type
+    `;
+    const byType = await sequelize.query(byTypeSql, {
+      replacements, type: QueryTypes.SELECT
+    });
+
+    // 3. 买家 TOP10
+    const topBuyersSql = `
+      SELECT
+        buyer_name,
+        COUNT(*) AS count,
+        COALESCE(SUM(sold_price), 0) AS revenue,
+        COALESCE(SUM(actual_profit), 0) AS profit
+      FROM patent_inventory
+      WHERE status = 'sold' AND buyer_name IS NOT NULL ${userFilter}
+      GROUP BY buyer_name
+      ORDER BY revenue DESC
+      LIMIT 10
+    `;
+    const topBuyers = await sequelize.query(topBuyersSql, {
+      replacements, type: QueryTypes.SELECT
+    });
+
+    // 4. 持有天数分布
+    const holdingDistSql = `
+      SELECT
+        CASE
+          WHEN DATEDIFF(sold_time, stock_in_date) < 30 THEN '0-30天'
+          WHEN DATEDIFF(sold_time, stock_in_date) < 90 THEN '30-90天'
+          WHEN DATEDIFF(sold_time, stock_in_date) < 180 THEN '90-180天'
+          ELSE '180天以上'
+        END AS range_label,
+        COUNT(*) AS count,
+        COALESCE(SUM(actual_profit), 0) AS profit
+      FROM patent_inventory
+      WHERE status = 'sold' AND stock_in_date IS NOT NULL AND sold_time IS NOT NULL ${userFilter}
+      GROUP BY range_label
+      ORDER BY FIELD(range_label, '0-30天', '30-90天', '90-180天', '180天以上')
+    `;
+    const holdingDist = await sequelize.query(holdingDistSql, {
+      replacements, type: QueryTypes.SELECT
+    });
+
+    return {
+      trend: trend.map(r => ({
+        month: r.month,
+        count: parseInt(r.count, 10),
+        revenue: parseFloat(parseFloat(r.revenue).toFixed(2)),
+        profit: parseFloat(parseFloat(r.profit).toFixed(2))
+      })),
+      byType: byType.map(r => ({
+        resource_type: r.resource_type,
+        count: parseInt(r.count, 10),
+        revenue: parseFloat(parseFloat(r.revenue).toFixed(2)),
+        profit: parseFloat(parseFloat(r.profit).toFixed(2))
+      })),
+      topBuyers: topBuyers.map(r => ({
+        buyer_name: r.buyer_name,
+        count: parseInt(r.count, 10),
+        revenue: parseFloat(parseFloat(r.revenue).toFixed(2)),
+        profit: parseFloat(parseFloat(r.profit).toFixed(2))
+      })),
+      holdingDist: holdingDist.map(r => ({
+        range: r.range_label,
+        count: parseInt(r.count, 10),
+        profit: parseFloat(parseFloat(r.profit).toFixed(2))
+      }))
+    };
   }
 
   // ==================== 私有工具 ====================

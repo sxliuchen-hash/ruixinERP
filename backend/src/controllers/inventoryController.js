@@ -345,6 +345,63 @@ async function getScanProgress(req, res, next) {
   }
 }
 
+/** POST /api/v1/inventory/:id/sell - 标记已售 */
+async function markAsSold(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { id: userId, role: userRole } = req.user;
+    const data = await inventoryService.markAsSold(parseInt(id, 10), req.body, userId, userRole);
+    res.json({ success: true, message: '已标记为已售', data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** POST /api/v1/inventory/:id/unsell - 撤销已售 */
+async function unsell(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { id: userId, role: userRole } = req.user;
+    const data = await inventoryService.unsell(parseInt(id, 10), userId, userRole);
+    res.json({ success: true, message: '已撤销，恢复为在库', data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** GET /api/v1/inventory/sold - 已售归档列表 */
+async function getSoldList(req, res, next) {
+  try {
+    const { id: userId, role: userRole } = req.user;
+    const result = await inventoryService.getSoldList(req.query, userId, userRole);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** GET /api/v1/inventory/sold/stats - 已售统计摘要 */
+async function getSoldStats(req, res, next) {
+  try {
+    const { id: userId, role: userRole } = req.user;
+    const data = await inventoryService.getSoldStats(userId, userRole);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** GET /api/v1/inventory/sold/analytics - 已售统计分析（图表） */
+async function getSoldAnalytics(req, res, next) {
+  try {
+    const { id: userId, role: userRole } = req.user;
+    const data = await inventoryService.getSoldAnalytics(req.query, userId, userRole);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 /** POST /api/v1/inventory/anomalies/scan-stop - 停止扫描 */
 async function stopScan(req, res, next) {
   try {
@@ -379,5 +436,10 @@ module.exports = {
   resolveAnomaly,
   triggerAnomalyScan,
   getScanProgress,
-  stopScan
+  stopScan,
+  markAsSold,
+  unsell,
+  getSoldList,
+  getSoldStats,
+  getSoldAnalytics
 };

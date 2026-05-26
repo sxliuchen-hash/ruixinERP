@@ -148,6 +148,46 @@ export function stopAnomalyScan() {
   return request.post('/inventory/anomalies/scan-stop')
 }
 
+// ============ 已售归档 ============
+
+/**
+ * 标记已售
+ * @param {number} id 库存 ID
+ * @param {Object} data { sold_price, buyer_name, sold_time?, buyer_contact?, sale_contract_id?, sale_remark? }
+ */
+export function markAsSold(id, data) {
+  return request.post(`/inventory/${id}/sell`, data)
+}
+
+/**
+ * 撤销已售（恢复为在库）
+ * @param {number} id 库存 ID
+ */
+export function unsellInventory(id) {
+  return request.post(`/inventory/${id}/unsell`)
+}
+
+/**
+ * 已售归档列表
+ * @param {Object} params { keyword, buyer_name, resource_type, sold_time_start, sold_time_end, profit_type, sort, order, page, pageSize }
+ */
+export function getSoldList(params) {
+  return request.get('/inventory/sold', { params })
+}
+
+/** 已售统计摘要（卡片数据） */
+export function getSoldStats() {
+  return request.get('/inventory/sold/stats')
+}
+
+/**
+ * 已售统计分析（图表数据）
+ * @param {Object} params { period: 'month'|'quarter'|'year' }
+ */
+export function getSoldAnalytics(params) {
+  return request.get('/inventory/sold/analytics', { params })
+}
+
 // ============ 聚合接口 ============
 
 /** 库存总览统计 */

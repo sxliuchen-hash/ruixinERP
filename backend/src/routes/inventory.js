@@ -40,7 +40,10 @@ const {
   changePriceSchema,
   batchChangePriceSchema,
   createAnnualFeeSchema,
-  expiringQuerySchema
+  expiringQuerySchema,
+  markAsSoldSchema,
+  soldListQuerySchema,
+  soldAnalyticsQuerySchema
 } = require('../validators/inventory');
 
 // multer 内存存储（批量导入用）
@@ -88,6 +91,17 @@ router.post('/batch-delete',
   requireAdmin(),
   operationLog('delete', 'patent_inventory'),
   inventoryController.batchDelete
+);
+
+// ===== 已售归档 =====
+router.get('/sold',
+  validate(soldListQuerySchema, 'query'),
+  inventoryController.getSoldList
+);
+router.get('/sold/stats', inventoryController.getSoldStats);
+router.get('/sold/analytics',
+  validate(soldAnalyticsQuerySchema, 'query'),
+  inventoryController.getSoldAnalytics
 );
 
 // ===== 异常告警 =====
@@ -155,6 +169,17 @@ router.delete('/:id/fees/:feeId',
 router.post('/:id/sync-from-ip',
   operationLog('update', 'patent_inventory'),
   inventoryController.syncFromIpSystem
+);
+
+// ===== 已售操作 =====
+router.post('/:id/sell',
+  validate(markAsSoldSchema),
+  operationLog('update', 'patent_inventory'),
+  inventoryController.markAsSold
+);
+router.post('/:id/unsell',
+  operationLog('update', 'patent_inventory'),
+  inventoryController.unsell
 );
 
 module.exports = router;

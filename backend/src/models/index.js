@@ -119,6 +119,7 @@ BankAccount.hasMany(LoanRepayment, { foreignKey: 'account_id', as: 'loanRepaymen
 // project_id 预留给 T16 Project 模型，这里不建关联
 PatentInventory.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
 PatentInventory.belongsTo(Contract, { foreignKey: 'contract_id', as: 'contract' });
+PatentInventory.belongsTo(Contract, { foreignKey: 'sale_contract_id', as: 'sale_contract' });
 PatentInventory.belongsTo(Supplier, { foreignKey: 'agent_id', as: 'agent' });
 Supplier.hasMany(PatentInventory, { foreignKey: 'supplier_id', as: 'inventories' });
 Supplier.hasMany(PatentInventory, { foreignKey: 'agent_id', as: 'agentedInventories' });

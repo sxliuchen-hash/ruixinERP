@@ -83,6 +83,12 @@ const routes = [
         meta: { title: '专利库存' }
       },
       {
+        path: 'inventory/sold-analytics',
+        name: 'SoldAnalytics',
+        component: () => import('@/views/inventory/SoldAnalytics.vue'),
+        meta: { title: '已售统计' }
+      },
+      {
         path: 'inventory/anomalies',
         name: 'PatentAnomalyAlerts',
         component: () => import('@/views/inventory/PatentAnomalyAlerts.vue'),
