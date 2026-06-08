@@ -555,3 +555,57 @@ CREATE TABLE IF NOT EXISTS `bank_statements` (
   KEY `idx_trans_date` (`trans_date`),
   KEY `idx_matched_payment_id` (`matched_payment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='银行流水表';
+
+
+-- ============================================================
+-- 薪酬模块：业绩上传 + 工资条（feature/payroll-performance）
+-- ============================================================
+-- 业绩上传批次表
+CREATE TABLE IF NOT EXISTS `performance_imports` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `year` INT NOT NULL COMMENT '业绩归属年份',
+  `month` INT NOT NULL COMMENT '业绩归属月份(1-12)',
+  `file_name` VARCHAR(255) DEFAULT NULL COMMENT '上传文件名',
+  `record_count` INT DEFAULT 0 COMMENT '明细条数',
+  `total_performance` DECIMAL(14,2) DEFAULT 0 COMMENT '核定业绩合计',
+  `status` ENUM('draft','confirmed') DEFAULT 'draft' COMMENT '状态：草稿/已确认',
+  `uploaded_by` INT DEFAULT NULL COMMENT '上传人(users.id)',
+  `confirmed_by` INT DEFAULT NULL COMMENT '确认人',
+  `confirmed_at` DATETIME DEFAULT NULL COMMENT '确认时间',
+  `remark` TEXT DEFAULT NULL COMMENT '备注',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_year_month` (`year`,`month`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业绩上传批次';
+
+-- 业绩明细表
+CREATE TABLE IF NOT EXISTS `performance_records` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `batch_id` INT NOT NULL COMMENT '所属上传批次ID',
+  `year` INT NOT NULL COMMENT '归属年份(尾款日期所在年)',
+  `month` INT NOT NULL COMMENT '归属月份(尾款日期所在月)',
+  `employee_id` INT DEFAULT NULL COMMENT '匹配到的员工ID',
+  `user_id` INT DEFAULT NULL COMMENT '匹配到的users.id',
+  `employee_name` VARCHAR(50) NOT NULL COMMENT '上传填写的姓名',
+  `business_type` VARCHAR(50) DEFAULT NULL COMMENT '业务类型',
+  `serial_no` VARCHAR(100) DEFAULT NULL COMMENT '业务流水号',
+  `target_no` VARCHAR(100) DEFAULT NULL COMMENT '专利号/项目号',
+  `target_name` VARCHAR(500) DEFAULT NULL COMMENT '专利名/项目名',
+  `contract_amount` DECIMAL(14,2) DEFAULT 0 COMMENT '合同金额',
+  `performance_amount` DECIMAL(14,2) DEFAULT 0 COMMENT '核定业绩(提成基数)',
+  `contract_date` DATE DEFAULT NULL COMMENT '合同日期',
+  `final_payment_date` DATE DEFAULT NULL COMMENT '尾款日期',
+  `is_full_risk_agent` TINYINT(1) DEFAULT 0 COMMENT '是否全风险代理(仅记录)',
+  `remark` TEXT DEFAULT NULL COMMENT '备注',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_batch` (`batch_id`),
+  KEY `idx_employee_month` (`employee_id`,`year`,`month`),
+  KEY `idx_year_month` (`year`,`month`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业绩明细';
+
+-- 专利库存表新增采购人员字段（已存在时忽略错误）
+-- ALTER TABLE `patent_inventory` ADD COLUMN `purchaser_id` INT DEFAULT NULL COMMENT '采购人员(employees.id)' AFTER `created_by`;

@@ -57,6 +57,10 @@ const BankStatement = require('./BankStatement');
 // Phase 5: 人事薪资（T-HR1）
 const Employee = require('./Employee');
 
+// Phase 5: 薪酬模块（业绩上传 + 工资条）
+const PerformanceImport = require('./PerformanceImport');
+const PerformanceRecord = require('./PerformanceRecord');
+
 // Phase 5: 系统设置
 const SystemSetting = require('./SystemSetting');
 
@@ -172,6 +176,10 @@ BankStatement.belongsTo(BankAccount, { foreignKey: 'account_id', as: 'account' }
 BankStatement.belongsTo(Payment, { foreignKey: 'matched_payment_id', as: 'matchedPayment' });
 BankAccount.hasMany(BankStatement, { foreignKey: 'account_id', as: 'statements' });
 
+// ----- 业绩上传批次 ↔ 业绩明细（薪酬模块） -----
+PerformanceRecord.belongsTo(PerformanceImport, { foreignKey: 'batch_id', as: 'batch' });
+PerformanceImport.hasMany(PerformanceRecord, { foreignKey: 'batch_id', as: 'records' });
+
 // ==================== 待开发模型（按 Phase 顺序添加） ====================
 // Phase 2: T9-T11/T13（企微集成 + 自动归类）
 //   const WechatApproval = require('./WechatApproval');
@@ -203,4 +211,6 @@ module.exports = {
   Employee,
   SystemSetting,
   MainUser,
+  PerformanceImport,
+  PerformanceRecord,
 };

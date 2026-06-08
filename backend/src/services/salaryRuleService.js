@@ -89,6 +89,44 @@ const DEFAULT_RULES = [
       regular_base: 3500 // 正式员工基础合计（不含职级津贴）
     },
     remark: '日薪 = (基本工资+岗位补贴) ÷ 21.75'
+  },
+  {
+    rule_type: 'attendance',
+    rule_name: '考勤扣款参数',
+    rule_data: {
+      // 日薪折算基数：base=基本工资+岗位补贴；full=应发全部
+      daily_salary_base: 'base',
+      work_days_per_month: 21.75,
+      // 事假：不带薪，按日薪全扣（deduct_rate=1 表示扣满日薪）
+      personal_leave_deduct_rate: 1,
+      // 病假：带薪打折，扣 (1 - sick_pay_rate) 的日薪；sick_pay_rate=0.6 表示发 60%
+      sick_pay_rate: 0.6,
+      // 实发工资下限（兜底）：不低于最低工资 × min_wage_ratio
+      min_wage: 2160,
+      min_wage_ratio: 0.8
+    },
+    remark: '事假全扣日薪；病假发60%（实发不低于最低工资80%）；日薪=(基本工资+岗位补贴)÷21.75'
+  },
+  {
+    rule_type: 'income_tax',
+    rule_name: '个人所得税参数（简化版-按月独立计税）',
+    rule_data: {
+      // 简化版：按月独立计税，非累计预扣法
+      mode: 'monthly_simple',
+      threshold: 5000, // 起征点（减除费用）
+      special_deduction: 0, // 专项附加扣除（预留，初期填0）
+      // 月度税率表（综合所得换算的月度速算表）
+      brackets: [
+        { min: 0, max: 3000, rate: 0.03, deduct: 0 },
+        { min: 3000, max: 12000, rate: 0.10, deduct: 210 },
+        { min: 12000, max: 25000, rate: 0.20, deduct: 1410 },
+        { min: 25000, max: 35000, rate: 0.25, deduct: 2660 },
+        { min: 35000, max: 55000, rate: 0.30, deduct: 4410 },
+        { min: 55000, max: 80000, rate: 0.35, deduct: 7160 },
+        { min: 80000, max: null, rate: 0.45, deduct: 15160 }
+      ]
+    },
+    remark: '应纳税所得=应发-个人社保-起征点-专项附加；按月套税率表。后续可升级为累计预扣法'
   }
 ];
 
@@ -103,7 +141,23 @@ class SalaryRuleService {
       await SalaryRule.bulkCreate(DEFAULT_RULES);
       return { initialized: true, count: DEFAULT_RULES.length };
     }
-    return { initialized: false, count };
+    // 表非空时，补齐缺失的规则类型（如新增的 attendance / income_tax）
+    const ensured = await this.ensureRules();
+    return { initialized: false, count, ensured };
+  }
+
+  /**
+   * 补齐缺失的规则类型（幂等）：表里没有的默认规则插入进去
+   * @returns {Promise<string[]>} 本次新增的 rule_type 列表
+   */
+  async ensureRules() {
+    const existing = await SalaryRule.findAll({ attributes: ['rule_type'], raw: true });
+    const existingTypes = new Set(existing.map(r => r.rule_type));
+    const toCreate = DEFAULT_RULES.filter(r => !existingTypes.has(r.rule_type));
+    if (toCreate.length > 0) {
+      await SalaryRule.bulkCreate(toCreate);
+    }
+    return toCreate.map(r => r.rule_type);
   }
 
   /**
@@ -180,6 +234,33 @@ class SalaryRuleService {
   async getSocialInsuranceRule() {
     const rule = await this.getRule('social_insurance');
     return rule ? rule.rule_data : DEFAULT_RULES[2].rule_data;
+  }
+
+  /**
+   * 获取采购提成规则
+   * @returns {Object} purchase_commission rule_data
+   */
+  async getPurchaseCommissionRule() {
+    const rule = await this.getRule('purchase_commission');
+    return rule ? rule.rule_data : DEFAULT_RULES.find(r => r.rule_type === 'purchase_commission').rule_data;
+  }
+
+  /**
+   * 获取考勤扣款规则
+   * @returns {Object} attendance rule_data
+   */
+  async getAttendanceRule() {
+    const rule = await this.getRule('attendance');
+    return rule ? rule.rule_data : DEFAULT_RULES.find(r => r.rule_type === 'attendance').rule_data;
+  }
+
+  /**
+   * 获取个税规则
+   * @returns {Object} income_tax rule_data
+   */
+  async getIncomeTaxRule() {
+    const rule = await this.getRule('income_tax');
+    return rule ? rule.rule_data : DEFAULT_RULES.find(r => r.rule_type === 'income_tax').rule_data;
   }
 }
 

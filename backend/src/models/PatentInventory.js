@@ -163,6 +163,10 @@ const PatentInventory = sequelize.define('PatentInventory', {
   created_by: {
     type: DataTypes.INTEGER,
     comment: '创建人（agent 数据隔离依据）'
+  },
+  purchaser_id: {
+    type: DataTypes.INTEGER,
+    comment: '采购人员（关联 employees.id，用于采购提成归属）'
   }
 }, {
   tableName: 'patent_inventory',
