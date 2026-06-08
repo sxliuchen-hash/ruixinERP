@@ -16,6 +16,7 @@
           <el-option label="草稿" value="draft" />
           <el-option label="已确认" value="confirmed" />
           <el-option label="已发放" value="paid" />
+          <el-option label="已作废" value="voided" />
         </el-select>
         <el-button type="primary" @click="handleGenerate" :loading="generating">
           生成本月工资条
@@ -23,6 +24,7 @@
         <el-button type="success" @click="handleConfirmAll" :disabled="summary.draft_count === 0">
           批量确认
         </el-button>
+        <el-button @click="openAdjustment">新增调整项</el-button>
       </div>
     </div>
 
@@ -79,16 +81,29 @@
           <span class="commission">{{ row.commission > 0 ? row.commission : '-' }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="采购提成" width="90" align="right">
+        <template #default="{ row }">
+          <span class="commission">{{ row.purchase_commission > 0 ? row.purchase_commission : '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="bonus" label="奖金" width="70" align="right" />
       <el-table-column label="社保" width="80" align="right">
         <template #default="{ row }">
           <span class="deduction-text">-{{ row.social_insurance }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="请假" width="90" align="right">
+      <el-table-column label="个税" width="80" align="right">
         <template #default="{ row }">
-          <span v-if="row.leave_days > 0" class="deduction-text">
-            {{ row.leave_days }}天 / -{{ row.leave_deduction }}
+          <span v-if="row.income_tax > 0" class="deduction-text">-{{ row.income_tax }}</span>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="请假扣款" width="120" align="right">
+        <template #default="{ row }">
+          <span v-if="row.leave_deduction > 0" class="deduction-text">
+            <span v-if="row.personal_leave_days > 0">事{{ row.personal_leave_days }}</span>
+            <span v-if="row.sick_leave_days > 0">病{{ row.sick_leave_days }}</span>
+            / -{{ row.leave_deduction }}
           </span>
           <span v-else>-</span>
         </template>
@@ -109,7 +124,7 @@
           <el-tag :type="STATUS_TYPE[row.status]" size="small">{{ STATUS_LABEL[row.status] }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160" align="center" fixed="right">
+      <el-table-column label="操作" width="180" align="center" fixed="right">
         <template #default="{ row }">
           <template v-if="row.status === 'draft'">
             <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
@@ -118,9 +133,13 @@
           </template>
           <template v-else-if="row.status === 'confirmed'">
             <el-button type="warning" link size="small" @click="handlePaid(row)">发放</el-button>
+            <el-button type="danger" link size="small" @click="handleVoid(row)">作废</el-button>
+          </template>
+          <template v-else-if="row.status === 'paid'">
+            <el-button type="danger" link size="small" @click="handleVoid(row)">作废</el-button>
           </template>
           <template v-else>
-            <span class="paid-label">已发放</span>
+            <span class="paid-label">已作废</span>
           </template>
         </template>
       </el-table-column>
@@ -133,14 +152,20 @@
         <el-descriptions-item label="月业绩">¥{{ formatMoney(editRow.monthly_profit) }}</el-descriptions-item>
         <el-descriptions-item label="基本工资">{{ editRow.base_salary }}</el-descriptions-item>
         <el-descriptions-item label="提成">{{ editRow.commission }}</el-descriptions-item>
+        <el-descriptions-item label="采购提成">{{ editRow.purchase_commission }}</el-descriptions-item>
+        <el-descriptions-item label="个税">{{ editRow.income_tax }}</el-descriptions-item>
       </el-descriptions>
       <el-form label-width="100px">
         <el-form-item label="奖金(元)">
           <el-input-number v-model="editForm.bonus" :min="0" :step="100" style="width: 200px" />
         </el-form-item>
-        <el-form-item label="请假天数">
-          <el-input-number v-model="editForm.leave_days" :min="0" :max="31" :step="0.5" :precision="1" style="width: 200px" />
-          <span class="form-tip">有请假则全勤奖为0</span>
+        <el-form-item label="事假天数">
+          <el-input-number v-model="editForm.personal_leave_days" :min="0" :max="31" :step="0.5" :precision="1" style="width: 200px" />
+          <span class="form-tip">全扣日薪</span>
+        </el-form-item>
+        <el-form-item label="病假天数">
+          <el-input-number v-model="editForm.sick_leave_days" :min="0" :max="31" :step="0.5" :precision="1" style="width: 200px" />
+          <span class="form-tip">按病假系数打折扣</span>
         </el-form-item>
         <el-form-item label="其他扣款(元)">
           <el-input-number v-model="editForm.other_deduction" :min="0" :step="50" style="width: 200px" />
@@ -149,9 +174,39 @@
           <el-input v-model="editForm.remark" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
+      <div class="form-hint">提示：有任何请假则全勤奖清零；保存后自动重算请假扣款、个税和实发。</div>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
         <el-button type="primary" :loading="editLoading" @click="submitEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 调整项弹窗 -->
+    <el-dialog v-model="adjustVisible" title="新增调整项（补发/补扣）" width="480px" destroy-on-close>
+      <el-alert type="info" :closable="false" style="margin-bottom: 16px"
+        title="调整项用于已确认/发放后的更正，单独生成一条记录。补发填奖金，补扣填其他扣款。" />
+      <el-form label-width="110px">
+        <el-form-item label="员工" required>
+          <el-select v-model="adjustForm.employee_id" filterable placeholder="选择员工" style="width: 260px">
+            <el-option v-for="e in employees" :key="e.id" :label="`${e.name}（${ROLE_LABEL[e.role] || e.role}）`" :value="e.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="归属月" required>
+          <el-date-picker v-model="adjustForm.month" type="month" placeholder="选择年月" format="YYYY-MM" value-format="YYYY-MM" style="width: 260px" />
+        </el-form-item>
+        <el-form-item label="补发金额(元)">
+          <el-input-number v-model="adjustForm.bonus" :min="0" :step="100" style="width: 200px" />
+        </el-form-item>
+        <el-form-item label="补扣金额(元)">
+          <el-input-number v-model="adjustForm.other_deduction" :min="0" :step="50" style="width: 200px" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="adjustForm.remark" type="textarea" :rows="2" placeholder="调整原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="adjustVisible = false">取消</el-button>
+        <el-button type="primary" :loading="adjustLoading" @click="submitAdjustment">提交</el-button>
       </template>
     </el-dialog>
   </div>
@@ -162,13 +217,15 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   generatePayroll, getPayrollSummary, updatePayroll,
-  confirmPayroll, confirmPayrollBatch, markPayrollPaid, deletePayroll
+  confirmPayroll, confirmPayrollBatch, markPayrollPaid, deletePayroll,
+  voidPayroll, addPayrollAdjustment
 } from '@/api/payroll'
+import { getEmployeeList } from '@/api/employee'
 
 const ROLE_LABEL = { boss: '老板', partner: '合伙人', sales: '销售', purchase: '采购', admin: '内勤' }
 const ROLE_TYPE = { boss: 'danger', partner: 'warning', sales: 'success', purchase: '', admin: 'info' }
-const STATUS_LABEL = { draft: '草稿', confirmed: '已确认', paid: '已发放' }
-const STATUS_TYPE = { draft: 'info', confirmed: 'warning', paid: 'success' }
+const STATUS_LABEL = { draft: '草稿', confirmed: '已确认', paid: '已发放', voided: '已作废' }
+const STATUS_TYPE = { draft: 'info', confirmed: 'warning', paid: 'success', voided: 'danger' }
 
 const now = new Date()
 const selectedMonth = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
@@ -182,7 +239,13 @@ const summary = ref({ total_count: 0, draft_count: 0, confirmed_count: 0, paid_c
 const editVisible = ref(false)
 const editLoading = ref(false)
 const editRow = ref({})
-const editForm = reactive({ bonus: 0, leave_days: 0, other_deduction: 0, remark: '' })
+const editForm = reactive({ bonus: 0, personal_leave_days: 0, sick_leave_days: 0, other_deduction: 0, remark: '' })
+
+// 调整项
+const adjustVisible = ref(false)
+const adjustLoading = ref(false)
+const employees = ref([])
+const adjustForm = reactive({ employee_id: null, month: '', bonus: 0, other_deduction: 0, remark: '' })
 
 function formatMoney(val) {
   if (!val && val !== 0) return '0'
@@ -244,7 +307,8 @@ async function handleConfirmAll() {
 function handleEdit(row) {
   editRow.value = row
   editForm.bonus = parseFloat(row.bonus) || 0
-  editForm.leave_days = parseFloat(row.leave_days) || 0
+  editForm.personal_leave_days = parseFloat(row.personal_leave_days) || 0
+  editForm.sick_leave_days = parseFloat(row.sick_leave_days) || 0
   editForm.other_deduction = parseFloat(row.other_deduction) || 0
   editForm.remark = row.remark || ''
   editVisible.value = true
@@ -289,6 +353,63 @@ async function handleDelete(row) {
     ElMessage.success('已删除')
     fetchData()
   } catch (e) {}
+}
+
+async function handleVoid(row) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `作废 ${row.employee_name} 的工资条（${STATUS_LABEL[row.status]}）？请填写作废原因。`,
+      '作废确认',
+      { type: 'warning', inputPlaceholder: '作废原因（选填）', confirmButtonText: '确认作废' }
+    )
+    await voidPayroll(row.id, value || '')
+    ElMessage.success('已作废')
+    fetchData()
+  } catch (e) {}
+}
+
+async function loadEmployees() {
+  try {
+    const res = await getEmployeeList()
+    const list = res.data?.data || res.data || []
+    // 排除老板/合伙人（不生成工资条），但调整项可补任何在职员工
+    employees.value = Array.isArray(list) ? list : (list.rows || [])
+  } catch (e) { /* 静默 */ }
+}
+
+function openAdjustment() {
+  adjustForm.employee_id = null
+  adjustForm.month = selectedMonth.value
+  adjustForm.bonus = 0
+  adjustForm.other_deduction = 0
+  adjustForm.remark = ''
+  if (employees.value.length === 0) loadEmployees()
+  adjustVisible.value = true
+}
+
+async function submitAdjustment() {
+  if (!adjustForm.employee_id || !adjustForm.month) {
+    ElMessage.warning('请选择员工和归属月')
+    return
+  }
+  const [year, month] = adjustForm.month.split('-').map(Number)
+  adjustLoading.value = true
+  try {
+    await addPayrollAdjustment({
+      employee_id: adjustForm.employee_id,
+      year, month,
+      bonus: adjustForm.bonus,
+      other_deduction: adjustForm.other_deduction,
+      remark: adjustForm.remark
+    })
+    ElMessage.success('已新增调整项')
+    adjustVisible.value = false
+    fetchData()
+  } catch (e) {
+    ElMessage.error('提交失败：' + (e.response?.data?.message || e.message))
+  } finally {
+    adjustLoading.value = false
+  }
 }
 
 function getSummary({ columns, data }) {
@@ -347,4 +468,5 @@ onMounted(fetchData)
 .net-salary { color: #67c23a; font-size: 13px; }
 .paid-label { color: #909399; font-size: 12px; }
 .form-tip { font-size: 12px; color: #909399; margin-left: 8px; }
+.form-hint { font-size: 12px; color: #909399; margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; }
 </style>

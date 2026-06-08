@@ -194,6 +194,106 @@
         </el-card>
       </el-tab-pane>
 
+      <!-- 考勤扣款 -->
+      <el-tab-pane label="考勤扣款" name="attendance">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>考勤扣款参数（事假/病假按法定）</span>
+              <div>
+                <el-button size="small" @click="resetRule('attendance')">恢复默认</el-button>
+                <el-button size="small" type="primary" @click="saveRule('attendance')">保存</el-button>
+              </div>
+            </div>
+          </template>
+          <el-alert type="info" :closable="false" style="margin-bottom: 16px">
+            日薪 = (基本工资+岗位补贴) ÷ 月计薪天数(21.75)。事假全扣日薪；病假发"病假发放系数"比例的工资（即扣 1-系数）；
+            实发不低于最低工资 × 兜底比例。
+          </el-alert>
+          <el-form label-width="180px" style="max-width: 560px">
+            <el-form-item label="月计薪天数">
+              <el-input-number v-model="attendanceData.work_days_per_month" :min="20" :max="23" :step="0.25" :precision="2" />
+              <span class="form-tip">法定 21.75</span>
+            </el-form-item>
+            <el-form-item label="事假扣款比例">
+              <el-input-number v-model="attendanceData.personal_leave_deduct_rate" :min="0" :max="1" :step="0.1" :precision="2" />
+              <span class="form-tip">1 = 全扣日薪</span>
+            </el-form-item>
+            <el-form-item label="病假发放系数">
+              <el-input-number v-model="attendanceData.sick_pay_rate" :min="0" :max="1" :step="0.05" :precision="2" />
+              <span class="form-tip">0.6 = 发60%工资，扣40%</span>
+            </el-form-item>
+            <el-form-item label="最低工资(元)">
+              <el-input-number v-model="attendanceData.min_wage" :min="0" :step="100" />
+              <span class="form-tip">西安最低工资标准</span>
+            </el-form-item>
+            <el-form-item label="实发下限比例">
+              <el-input-number v-model="attendanceData.min_wage_ratio" :min="0" :max="1" :step="0.05" :precision="2" />
+              <span class="form-tip">实发不低于 最低工资 × 此比例（法定 0.8）</span>
+            </el-form-item>
+          </el-form>
+        </el-card>
+      </el-tab-pane>
+
+      <!-- 个税 -->
+      <el-tab-pane label="个人所得税" name="income_tax">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>个税参数（简化版-按月独立计税）</span>
+              <div>
+                <el-button size="small" @click="resetRule('income_tax')">恢复默认</el-button>
+                <el-button size="small" type="primary" @click="saveRule('income_tax')">保存</el-button>
+              </div>
+            </div>
+          </template>
+          <el-alert type="warning" :closable="false" style="margin-bottom: 16px">
+            当前为简化版：应纳税所得 = 应发 − 个人社保 − 起征点 − 专项附加，按月套税率表（非累计预扣法）。
+            后续可升级为累计预扣法 + 专项附加扣除录入。
+          </el-alert>
+          <el-form label-width="160px" style="max-width: 500px">
+            <el-form-item label="起征点(元)">
+              <el-input-number v-model="incomeTaxData.threshold" :min="0" :step="500" />
+              <span class="form-tip">当前 5000</span>
+            </el-form-item>
+            <el-form-item label="专项附加扣除(元)">
+              <el-input-number v-model="incomeTaxData.special_deduction" :min="0" :step="100" />
+              <span class="form-tip">默认0，后续按员工录入</span>
+            </el-form-item>
+          </el-form>
+          <el-divider>月度税率表</el-divider>
+          <el-table :data="incomeTaxBrackets" border size="small">
+            <el-table-column label="下限(元)" width="140">
+              <template #default="{ row }">
+                <el-input-number v-model="row.min" :min="0" :step="1000" size="small" style="width: 120px" />
+              </template>
+            </el-table-column>
+            <el-table-column label="上限(元)" width="180">
+              <template #default="{ row }">
+                <el-input-number v-model="row.max" :min="0" :step="1000" size="small" style="width: 120px" :disabled="row.max === null" />
+                <el-checkbox v-model="row.noLimit" size="small" style="margin-left: 8px" @change="v => row.max = v ? null : 80000">无上限</el-checkbox>
+              </template>
+            </el-table-column>
+            <el-table-column label="税率" width="110">
+              <template #default="{ row }">
+                <el-input-number v-model="row.rate" :min="0" :max="1" :step="0.01" :precision="2" size="small" style="width: 90px" />
+              </template>
+            </el-table-column>
+            <el-table-column label="速算扣除数" width="140">
+              <template #default="{ row }">
+                <el-input-number v-model="row.deduct" :min="0" :step="10" size="small" style="width: 120px" />
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" align="center">
+              <template #default="{ $index }">
+                <el-button type="danger" link size="small" @click="incomeTaxBrackets.splice($index, 1)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-button style="margin-top: 12px" size="small" @click="addTaxBracket">+ 添加档位</el-button>
+        </el-card>
+      </el-tab-pane>
+
       <!-- 通用参数 -->
       <el-tab-pane label="通用参数" name="general">
         <el-card>
@@ -245,6 +345,15 @@ const commissionTiers = ref([])
 const gradeItems = ref([])
 const socialData = reactive({ base: 2120, items: [], total_rate: 0.153 })
 const purchaseTiers = ref([])
+const attendanceData = reactive({
+  work_days_per_month: 21.75,
+  personal_leave_deduct_rate: 1,
+  sick_pay_rate: 0.6,
+  min_wage: 2160,
+  min_wage_ratio: 0.8
+})
+const incomeTaxData = reactive({ threshold: 5000, special_deduction: 0 })
+const incomeTaxBrackets = ref([])
 const generalData = reactive({
   work_days_per_month: 21.75,
   attendance_bonus: 100,
@@ -284,6 +393,14 @@ async function fetchRules() {
           break
         case 'purchase_commission':
           purchaseTiers.value = data.tiers || []
+          break
+        case 'attendance':
+          Object.assign(attendanceData, data)
+          break
+        case 'income_tax':
+          incomeTaxData.threshold = data.threshold ?? 5000
+          incomeTaxData.special_deduction = data.special_deduction ?? 0
+          incomeTaxBrackets.value = (data.brackets || []).map(b => ({ ...b, noLimit: b.max === null }))
           break
         case 'general':
           Object.assign(generalData, data)
@@ -341,6 +458,22 @@ async function saveRule(type) {
     case 'purchase_commission':
       rule_data = { tiers: purchaseTiers.value }
       break
+    case 'attendance':
+      rule_data = { ...attendanceData }
+      break
+    case 'income_tax':
+      rule_data = {
+        mode: 'monthly_simple',
+        threshold: incomeTaxData.threshold,
+        special_deduction: incomeTaxData.special_deduction,
+        brackets: incomeTaxBrackets.value.map(b => ({
+          min: b.min,
+          max: b.noLimit ? null : b.max,
+          rate: b.rate,
+          deduct: b.deduct
+        }))
+      }
+      break
     case 'general':
       rule_data = { ...generalData }
       break
@@ -370,6 +503,17 @@ function addCommissionTier() {
     max: null,
     rate: 0.1,
     label: '',
+    noLimit: true
+  })
+}
+
+function addTaxBracket() {
+  const last = incomeTaxBrackets.value[incomeTaxBrackets.value.length - 1]
+  incomeTaxBrackets.value.push({
+    min: last ? (last.max || last.min + 3000) : 0,
+    max: null,
+    rate: 0.03,
+    deduct: 0,
     noLimit: true
   })
 }
