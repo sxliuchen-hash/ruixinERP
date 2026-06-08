@@ -31,4 +31,7 @@ router.get('/quarterly', performanceController.getQuarterly);
 // 提成试算
 router.get('/commission', performanceController.calculateCommission);
 
+// 采购提成月度报表
+router.get('/purchase-commission', performanceController.getPurchaseCommission);
+
 module.exports = router;

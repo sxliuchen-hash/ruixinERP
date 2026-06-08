@@ -15,6 +15,7 @@ backend/logs/*.log
 # IDE
 .vscode/
 .idea/
+.windsurf/
 
 # OS
 .DS_Store

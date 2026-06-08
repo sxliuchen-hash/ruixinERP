@@ -15,6 +15,7 @@
  */
 
 const performanceService = require('../services/performanceService');
+const purchaseCommissionService = require('../services/purchaseCommissionService');
 
 /** GET /overview - 业绩概览统计卡片 */
 async function getOverview(req, res, next) {
@@ -84,10 +85,22 @@ async function calculateCommission(req, res, next) {
   } catch (error) { next(error); }
 }
 
+/** GET /purchase-commission - 采购提成月度报表（按采购人员） */
+async function getPurchaseCommission(req, res, next) {
+  try {
+    const now = new Date();
+    const year = parseInt(req.query.year) || now.getFullYear();
+    const month = parseInt(req.query.month) || (now.getMonth() + 1);
+    const data = await purchaseCommissionService.getMonthlyReport(year, month);
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+}
+
 module.exports = {
   getOverview,
   getRanking,
   getTrend,
   getQuarterly,
-  calculateCommission
+  calculateCommission,
+  getPurchaseCommission
 };

@@ -88,6 +88,26 @@ router.post('/:id/paid', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /payroll/:id/void - 作废（已确认/已发放可作废）
+router.post('/:id/void', async (req, res, next) => {
+  try {
+    const data = await payrollService.voidPayroll(parseInt(req.params.id), req.body.reason);
+    res.json({ success: true, data, message: '已作废' });
+  } catch (e) { next(e); }
+});
+
+// POST /payroll/adjustment - 新增调整项工资条（补发/补扣）
+router.post('/adjustment', async (req, res, next) => {
+  try {
+    const { employee_id, year, month } = req.body;
+    if (!employee_id || !year || !month) {
+      return res.status(400).json({ success: false, message: '请指定员工和年月' });
+    }
+    const data = await payrollService.addAdjustment(req.body);
+    res.json({ success: true, data, message: '已新增调整项' });
+  } catch (e) { next(e); }
+});
+
 // DELETE /payroll/:id - 删除（仅 draft）
 router.delete('/:id', async (req, res, next) => {
   try {

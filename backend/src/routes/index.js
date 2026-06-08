@@ -64,6 +64,8 @@ router.use('/employees', require('./employees'));
 router.use('/files', require('./files'));
 // 业绩统计（T-HR3）
 router.use('/performance', require('./performance'));
+// 业绩上传（薪酬模块）
+router.use('/performance-import', require('./performanceImport'));
 // 薪资规则配置（T-HR2）
 router.use('/salary-rules', require('./salaryRules'));
 // 工资条（T-HR4）

@@ -65,6 +65,11 @@ const Payroll = sequelize.define('Payroll', {
     defaultValue: 0,
     comment: '业务提成（销售超额累进/采购专利卖出）'
   },
+  purchase_commission: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0,
+    comment: '采购提成（采购人员卖出自营专利）'
+  },
   bonus: {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
@@ -76,15 +81,30 @@ const Payroll = sequelize.define('Payroll', {
     defaultValue: 0,
     comment: '社保公积金扣除（个人部分）'
   },
+  income_tax: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0,
+    comment: '个人所得税（简化版按月计税）'
+  },
   leave_days: {
     type: DataTypes.DECIMAL(4, 1),
     defaultValue: 0,
-    comment: '请假天数'
+    comment: '请假天数（事假+病假合计，兼容旧字段）'
+  },
+  personal_leave_days: {
+    type: DataTypes.DECIMAL(4, 1),
+    defaultValue: 0,
+    comment: '事假天数'
+  },
+  sick_leave_days: {
+    type: DataTypes.DECIMAL(4, 1),
+    defaultValue: 0,
+    comment: '病假天数'
   },
   leave_deduction: {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
-    comment: '请假扣款'
+    comment: '请假扣款（事假+病假合计）'
   },
   other_deduction: {
     type: DataTypes.DECIMAL(10, 2),
@@ -120,9 +140,22 @@ const Payroll = sequelize.define('Payroll', {
   },
   // ===== 状态 =====
   status: {
-    type: DataTypes.ENUM('draft', 'confirmed', 'paid'),
+    type: DataTypes.ENUM('draft', 'confirmed', 'paid', 'voided'),
     defaultValue: 'draft',
-    comment: '状态：草稿/已确认/已发放'
+    comment: '状态：草稿/已确认/已发放/已作废'
+  },
+  is_adjustment: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: '是否为调整项工资条（补发/补扣）'
+  },
+  adjust_source_id: {
+    type: DataTypes.INTEGER,
+    comment: '调整项关联的原工资条 ID'
+  },
+  voided_reason: {
+    type: DataTypes.STRING(255),
+    comment: '作废原因'
   },
   remark: {
     type: DataTypes.TEXT,
@@ -142,7 +175,10 @@ const Payroll = sequelize.define('Payroll', {
   createdAt: 'create_time',
   updatedAt: 'update_time',
   indexes: [
-    { unique: true, fields: ['employee_id', 'year', 'month'] }
+    // 注：不再用唯一索引（调整项允许同员工同月多条）；
+    // 主工资条(is_adjustment=false)的唯一性由 service 层保证
+    { fields: ['employee_id', 'year', 'month'] },
+    { fields: ['status'] }
   ]
 });
 
