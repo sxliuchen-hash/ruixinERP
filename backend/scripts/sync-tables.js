@@ -17,8 +17,10 @@ async function run() {
   console.log('✅ employees table synced');
   await SalaryRule.sync({ force: false });
   console.log('✅ salary_rules table synced');
-  await Payroll.sync({ force: false });
-  console.log('✅ payrolls table synced');
+  // alter:true 给已存在的 payrolls 表补充新列
+  // (income_tax/purchase_commission/事假病假天数/is_adjustment/voided 状态等)
+  await Payroll.sync({ alter: true });
+  console.log('✅ payrolls table synced (new columns)');
   await PerformanceImport.sync({ force: false });
   console.log('✅ performance_imports table synced');
   await PerformanceRecord.sync({ force: false });
