@@ -27,7 +27,20 @@
         <el-menu-item index="/payments">收付款</el-menu-item>
         <el-menu-item index="/invoices">发票管理</el-menu-item>
         <el-menu-item index="/projects">交易项目</el-menu-item>
+      </el-sub-menu>
+
+      <!-- 人力薪资 -->
+      <el-sub-menu index="hr">
+        <template #title>
+          <el-icon><UserFilled /></el-icon>
+          <span>人力薪资</span>
+        </template>
         <el-menu-item index="/performance">业绩统计</el-menu-item>
+        <template v-if="userStore.isAdmin">
+          <el-menu-item index="/employees">员工档案</el-menu-item>
+          <el-menu-item index="/payroll">工资条</el-menu-item>
+          <el-menu-item index="/system/salary-rules">薪资规则</el-menu-item>
+        </template>
       </el-sub-menu>
 
       <!-- 费用 -->
@@ -82,9 +95,6 @@
           <el-icon><Setting /></el-icon>
           <span>系统设置</span>
         </template>
-        <el-menu-item index="/employees">员工档案</el-menu-item>
-        <el-menu-item index="/system/salary-rules">薪资规则</el-menu-item>
-        <el-menu-item index="/payroll">工资条</el-menu-item>
         <el-menu-item index="/system/templates">审批模板映射</el-menu-item>
         <el-menu-item index="/system/classify-rules">归类规则</el-menu-item>
         <el-menu-item index="/system/wechat-bindings">企微绑定</el-menu-item>
@@ -98,7 +108,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  DataAnalysis, Briefcase, Wallet, Box, User, Tools, Setting, Warning
+  DataAnalysis, Briefcase, Wallet, Box, User, Tools, Setting, Warning, UserFilled
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 

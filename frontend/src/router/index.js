@@ -145,28 +145,28 @@ const routes = [
         path: 'performance',
         name: 'Performance',
         component: () => import('@/views/performance/PerformanceDashboard.vue'),
-        meta: { title: '业绩统计' }
+        meta: { title: '业绩统计', watermark: true }
       },
       // 薪资规则配置（T-HR2）
       {
         path: 'system/salary-rules',
         name: 'SalaryRules',
         component: () => import('@/views/system/SalaryRules.vue'),
-        meta: { title: '薪资规则', role: 'admin' }
+        meta: { title: '薪资规则', role: 'admin', watermark: true }
       },
       // 工资条管理（T-HR4）
       {
         path: 'payroll',
         name: 'Payroll',
         component: () => import('@/views/payroll/PayrollList.vue'),
-        meta: { title: '工资条', role: 'admin' }
+        meta: { title: '工资条', role: 'admin', watermark: true }
       },
       // 员工档案（仅 admin）
       {
         path: 'employees',
         name: 'EmployeeList',
         component: () => import('@/views/employee/EmployeeList.vue'),
-        meta: { title: '员工档案', role: 'admin' }
+        meta: { title: '员工档案', role: 'admin', watermark: true }
       },
       // 系统设置（仅 admin）
       {

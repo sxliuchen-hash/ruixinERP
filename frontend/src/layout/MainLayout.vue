@@ -27,7 +27,10 @@
         </div>
       </el-header>
       <el-main class="main-content">
-        <router-view />
+        <Watermark v-if="needWatermark">
+          <router-view />
+        </Watermark>
+        <router-view v-else />
       </el-main>
     </el-container>
   </el-container>
@@ -36,12 +39,18 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { Fold, Expand } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import SystemSwitch from '@/components/layout/SystemSwitch.vue'
 import NotificationBell from '@/components/layout/NotificationBell.vue'
+import Watermark from '@/components/common/Watermark.vue'
 
 const userStore = useUserStore()
+const route = useRoute()
+
+// 敏感页面（工资/业绩/薪资规则/员工档案）开启防泄露水印
+const needWatermark = computed(() => route.meta && route.meta.watermark === true)
 
 // 侧边栏折叠状态（持久化到 localStorage）
 const sidebarCollapsed = ref(false)
