@@ -25,6 +25,8 @@ request.interceptors.request.use(
 )
 
 // 响应拦截器
+let isHandling401 = false // 防止 401 重复处理导致刷屏
+
 request.interceptors.response.use(
   (response) => {
     const res = response.data
@@ -36,15 +38,22 @@ request.interceptors.response.use(
     return res
   },
   (error) => {
-    const { response } = error
+    const { response, config } = error
     if (response) {
       switch (response.status) {
-        case 401:
-          // 未授权，清除 token 跳转登录
-          ElMessage.error('登录已过期，请重新登录')
-          const userStore = useUserStore()
-          userStore.logout()
+        case 401: {
+          // 登出接口本身的 401 直接忽略，避免循环
+          const isLogoutReq = config && config.url && config.url.includes('/auth/logout')
+          if (!isLogoutReq && !isHandling401) {
+            isHandling401 = true
+            ElMessage.error('登录已过期，请重新登录')
+            const userStore = useUserStore()
+            userStore.logout()
+            // 3 秒后允许再次提示
+            setTimeout(() => { isHandling401 = false }, 3000)
+          }
           break
+        }
         case 403:
           ElMessage.error('没有权限执行此操作')
           break
