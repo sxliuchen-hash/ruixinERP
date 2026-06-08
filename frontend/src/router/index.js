@@ -147,6 +147,13 @@ const routes = [
         component: () => import('@/views/performance/PerformanceDashboard.vue'),
         meta: { title: '业绩统计', watermark: true }
       },
+      // 业绩上传（薪酬模块，仅 admin）
+      {
+        path: 'performance/import',
+        name: 'PerformanceImport',
+        component: () => import('@/views/performance/PerformanceImport.vue'),
+        meta: { title: '业绩上传', role: 'admin', watermark: true }
+      },
       // 薪资规则配置（T-HR2）
       {
         path: 'system/salary-rules',

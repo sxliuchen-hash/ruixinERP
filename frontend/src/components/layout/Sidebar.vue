@@ -37,6 +37,7 @@
         </template>
         <el-menu-item index="/performance">业绩统计</el-menu-item>
         <template v-if="userStore.isAdmin">
+          <el-menu-item index="/performance/import">业绩上传</el-menu-item>
           <el-menu-item index="/employees">员工档案</el-menu-item>
           <el-menu-item index="/payroll">工资条</el-menu-item>
           <el-menu-item index="/system/salary-rules">薪资规则</el-menu-item>
@@ -130,6 +131,7 @@ const activeMenu = computed(() => {
   if (path === '/inventory/anomalies') return '/inventory/anomalies'
   if (path === '/inventory/sold-analytics') return '/inventory/sold-analytics'
   if (path.match(/^\/inventory\/\d+/)) return '/inventory'
+  if (path === '/performance/import') return '/performance/import'
   return path
 })
 </script>

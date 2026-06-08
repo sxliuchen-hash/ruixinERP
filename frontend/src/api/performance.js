@@ -27,3 +27,8 @@ export function getQuarterlySummary(params) {
 export function calculateCommission(params) {
   return request.get('/performance/commission', { params })
 }
+
+/** 采购提成月度报表（按采购人员） */
+export function getPurchaseCommission(params) {
+  return request.get('/performance/purchase-commission', { params })
+}
