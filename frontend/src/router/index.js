@@ -154,6 +154,13 @@ const routes = [
         component: () => import('@/views/performance/PerformanceImport.vue'),
         meta: { title: '业绩上传', role: 'admin', watermark: true }
       },
+      // 采购提成报表（仅 admin）
+      {
+        path: 'performance/purchase-commission',
+        name: 'PurchaseCommission',
+        component: () => import('@/views/performance/PurchaseCommission.vue'),
+        meta: { title: '采购提成', role: 'admin', watermark: true }
+      },
       // 薪资规则配置（T-HR2）
       {
         path: 'system/salary-rules',
