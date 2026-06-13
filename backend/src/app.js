@@ -23,9 +23,21 @@ const app = express();
 // 信任反向代理（Nginx），使 express-rate-limit 等中间件能正确获取客户端 IP
 app.set('trust proxy', 1);
 
-// CORS
+// CORS：白名单机制，CORS_ORIGIN 支持逗号分隔多个来源；
+// 未配置时仅放行本地开发端口，避免退化为 * 通配（与 credentials 冲突且不安全）
+const corsWhitelist = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin(origin, callback) {
+    // 无 origin 的请求（同源、服务端调用、curl）放行
+    if (!origin || corsWhitelist.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS 不允许的来源: ${origin}`));
+  },
   credentials: true
 }));
 
