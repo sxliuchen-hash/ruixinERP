@@ -147,7 +147,7 @@ class InventoryService {
   /**
    * 获取库存详情（含年费记录 + 调价历史）
    */
-  async getDetail(id) {
+  async getDetail(id, userId, userRole) {
     const inv = await PatentInventory.findByPk(id, {
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
@@ -169,6 +169,10 @@ class InventoryService {
     });
 
     if (!inv) {
+      throw new NotFoundError('库存记录不存在');
+    }
+    // 数据隔离：agent 仅能查看自己创建的记录
+    if (userRole === 'agent' && inv.created_by !== userId) {
       throw new NotFoundError('库存记录不存在');
     }
 

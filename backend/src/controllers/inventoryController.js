@@ -47,7 +47,8 @@ async function getExpiring(req, res, next) {
 async function getDetail(req, res, next) {
   try {
     const { id } = req.params;
-    const data = await inventoryService.getDetail(parseInt(id, 10));
+    const { id: userId, role: userRole } = req.user;
+    const data = await inventoryService.getDetail(parseInt(id, 10), userId, userRole);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -191,7 +192,7 @@ async function syncFromIpSystem(req, res, next) {
     const { id: userId, role: userRole } = req.user;
 
     // 先获取库存记录拿到 patent_no
-    const inv = await inventoryService.getDetail(parseInt(id, 10));
+    const inv = await inventoryService.getDetail(parseInt(id, 10), req.user.id, req.user.role);
 
     // 调用 IP 系统获取最新数据
     const ipSystemService = require('../services/ipSystemService');

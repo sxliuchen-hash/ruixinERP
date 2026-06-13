@@ -151,9 +151,13 @@ class PaymentService {
    * @returns {Promise<Payment>}
    * @throws {NotFoundError} 记录不存在
    */
-  async getDetail(id) {
+  async getDetail(id, userId, userRole) {
     const payment = await Payment.findByPk(id);
     if (!payment) {
+      throw new NotFoundError('收付款记录不存在');
+    }
+    // 数据隔离：agent 仅能查看自己创建的记录（详情接口此前缺失，存在越权读）
+    if (userRole === 'agent' && payment.created_by !== userId) {
       throw new NotFoundError('收付款记录不存在');
     }
     return payment;

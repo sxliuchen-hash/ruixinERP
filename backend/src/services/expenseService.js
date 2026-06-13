@@ -104,13 +104,17 @@ class ExpenseService {
   /**
    * 获取报销详情
    */
-  async getDetail(id) {
+  async getDetail(id, userId, userRole) {
     const expense = await Expense.findByPk(id, {
       include: [
         { model: BankAccount, as: 'account', attributes: ['id', 'name', 'account_type'] }
       ]
     });
     if (!expense) {
+      throw new NotFoundError('报销单不存在');
+    }
+    // 数据隔离：agent 仅能查看自己创建的记录
+    if (userRole === 'agent' && expense.created_by !== userId) {
       throw new NotFoundError('报销单不存在');
     }
     return expense;

@@ -122,7 +122,7 @@ class ProjectService {
   /**
    * 获取项目详情（含关联合同/收付款/库存）
    */
-  async getDetail(id) {
+  async getDetail(id, userId, userRole) {
     const project = await Project.findByPk(id, {
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name'] },
@@ -164,6 +164,10 @@ class ProjectService {
     });
 
     if (!project) throw new NotFoundError('项目不存在');
+    // 数据隔离：agent 仅能查看自己创建或负责的项目
+    if (userRole === 'agent' && project.created_by !== userId && project.owner_id !== userId) {
+      throw new NotFoundError('项目不存在');
+    }
     return project;
   }
 

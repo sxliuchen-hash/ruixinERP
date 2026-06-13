@@ -35,7 +35,8 @@ async function getList(req, res, next) {
 async function getDetail(req, res, next) {
   try {
     const { id } = req.params;
-    const payment = await paymentService.getDetail(parseInt(id, 10));
+    const { id: userId, role: userRole } = req.user;
+    const payment = await paymentService.getDetail(parseInt(id, 10), userId, userRole);
     res.json({ success: true, data: payment });
   } catch (error) {
     next(error);

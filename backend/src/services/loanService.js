@@ -110,7 +110,7 @@ class LoanService {
   /**
    * 获取借款详情（含还款明细）
    */
-  async getDetail(id) {
+  async getDetail(id, userId, userRole) {
     const loan = await Loan.findByPk(id, {
       include: [
         { model: BankAccount, as: 'account', attributes: ['id', 'name', 'account_type'] },
@@ -126,6 +126,10 @@ class LoanService {
       ]
     });
     if (!loan) {
+      throw new NotFoundError('借款单不存在');
+    }
+    // 数据隔离：agent 仅能查看自己创建的记录
+    if (userRole === 'agent' && loan.created_by !== userId) {
       throw new NotFoundError('借款单不存在');
     }
 
