@@ -205,6 +205,7 @@ import { getContractDetail, confirmContract } from '@/api/contract'
 import { formatMoney, formatDate } from '@/utils/format'
 import { CONTRACT_STATUS_MAP, CONFIRM_STATUS_MAP } from '@/utils/constants'
 import { useUserStore } from '@/stores/user'
+import request from '@/api/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -242,27 +243,49 @@ function getFileKey(file) {
   return match ? match[1] : ''
 }
 
-function previewFile(file) {
+// 先用 JWT 换取 60s 一次性票据，URL 不再暴露长效 token；票据失败则降级回 token
+async function buildFileUrl(key, preview) {
+  const previewQ = preview ? '&preview=1' : ''
+  try {
+    const res = await request.post('/files/ticket', { key })
+    const ticket = res?.data?.ticket
+    if (ticket) {
+      return `/api/v1/files/download?ticket=${encodeURIComponent(ticket)}${previewQ}`
+    }
+  } catch (e) {
+    // 降级到 token
+  }
+  return `/api/v1/files/download?key=${encodeURIComponent(key)}&token=${encodeURIComponent(userStore.token)}${previewQ}`
+}
+
+async function previewFile(file) {
   const key = getFileKey(file)
   if (!key) return
   currentPreviewFile.value = file
   previewTitle.value = file.field || '文件预览'
-  previewUrl.value = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1&token=${encodeURIComponent(userStore.token)}`
+  previewUrl.value = await buildFileUrl(key, true)
   previewVisible.value = true
 }
 
 function openInNewWindow(file) {
   const key = getFileKey(file)
   if (!key) return
-  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}&preview=1&token=${encodeURIComponent(userStore.token)}`
-  window.open(url, '_blank')
+  // 先同步打开空白窗口，避免 await 后 window.open 被浏览器拦截
+  const win = window.open('', '_blank')
+  buildFileUrl(key, true).then((url) => {
+    if (win) win.location.href = url
+    else window.open(url, '_blank')
+  })
 }
 
 function downloadFileForce(file) {
   const key = getFileKey(file)
   if (!key) return
-  const url = `/api/v1/files/download?key=${encodeURIComponent(key)}&token=${encodeURIComponent(userStore.token)}`
-  window.open(url, '_blank')
+  const win = window.open('', '_blank')
+  buildFileUrl(key, false).then((url) => {
+    if (win) win.location.href = url
+    else window.open(url, '_blank')
+  })
 }
 
 function formatFileSize(bytes) {
