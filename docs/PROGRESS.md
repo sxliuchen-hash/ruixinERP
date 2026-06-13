@@ -55,10 +55,11 @@
   - `docs/代码审查报告.md` —— 两轮 + 增量审查、修复状态表
   - `docs/关键流程回归清单.md` —— 上线前回归步骤
   - `docs/方案-URL-Token治理.md` —— 票据 + code 换 token 设计
-  - `docs/ci-workflow-reference.yml` —— CI 配置参考（待网页启用）
+  - `.github/workflows/ci.yml` —— CI 工作流（push/PR 自动跑 ESLint + Jest）
 - **工程化**：引入 ESLint；Jest 单测（26 用例，覆盖提成/个税/请假/进度/分页）；`backend/tests/integration/` 集成测试脚手架（默认跳过，配置测试库后启用）。
 - **质量门禁**：ESLint 全量 0 error；Jest 全绿；后端模块加载 LOAD-OK。
-- **待办（需人工）**：① GitHub 网页用 `docs/ci-workflow-reference.yml` 内容创建 `.github/workflows/ci.yml`（当前令牌缺 `workflow` 权限）；② 上线前按《关键流程回归清单》验证。
+- **CI**：`.github/workflows/ci.yml` 已启用 ✅（push/PR 自动跑 ESLint + Jest）。
+- **待办（需人工）**：上线前按《关键流程回归清单》在测试环境验证。
 
 ---
 
