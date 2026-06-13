@@ -44,6 +44,8 @@ class WechatCryptoService {
    */
   verifySignature(signature, timestamp, nonce, encryptMsg) {
     const token = wechatConfig.token || '';
+    // 未配置回调 Token 时直接判定失败，避免用空 token 计算签名被伪造回调绕过
+    if (!token) return false;
     const arr = [token, timestamp, nonce, encryptMsg].sort();
     const str = arr.join('');
     const hash = crypto.createHash('sha1').update(str).digest('hex');
