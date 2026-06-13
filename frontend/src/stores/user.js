@@ -16,7 +16,7 @@ export const useUserStore = defineStore('user', () => {
   // Getters
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userInfo.value.role === 'admin')
-  const isFinance = computed(() => userInfo.value.role === 'finance' || userInfo.value.role === 'admin')
+  const isFinance = computed(() => userInfo.value.role === 'process' || userInfo.value.role === 'admin')
 
   // Actions
   function setToken(newToken) {
