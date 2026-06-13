@@ -66,6 +66,14 @@ const initJobs = () => {
   });
   logger.info('已注册：在库专利全量信息扫描（每周日 06:00）');
 
+  // 7. 冗余字段对账校验（每日 02:30）
+  cron.schedule('30 2 * * *', () => {
+    require('./reconcileAggregatesJob').run().catch(e => {
+      logger.error('reconcileAggregatesJob 执行失败:', e);
+    });
+  });
+  logger.info('已注册：冗余字段对账校验（每日 02:30）');
+
   logger.info('定时任务初始化完成');
 };
 
