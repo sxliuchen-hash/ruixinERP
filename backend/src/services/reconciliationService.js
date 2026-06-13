@@ -35,7 +35,7 @@
 
 const ExcelJS = require('exceljs');
 const crypto = require('crypto');
-const { Op, QueryTypes } = require('sequelize');
+const { Op, QueryTypes, literal } = require('sequelize');
 const { sequelize } = require('../config/database');
 const BankStatement = require('../models/BankStatement');
 const BankAccount = require('../models/BankAccount');
@@ -179,7 +179,6 @@ class ReconciliationService {
 
     let extra = [];
     if (startDate && endDate) {
-      const matchedIds = matched.map(s => s.matched_payment_id).filter(Boolean);
       // 扩展 ±FUZZY_DATE_TOLERANCE 天，避免边界漏判
       const startExtended = new Date(startDate);
       startExtended.setDate(startExtended.getDate() - FUZZY_DATE_TOLERANCE);
@@ -196,7 +195,10 @@ class ReconciliationService {
               endExtended.toISOString().slice(0, 10)
             ]
           },
-          ...(matchedIds.length ? { id: { [Op.notIn]: matchedIds } } : {})
+          // 排除已被「任意批次」匹配的 payment（而非仅当前批次），避免 extra 虚高
+          [Op.and]: [
+            literal("payments.id NOT IN (SELECT matched_payment_id FROM bank_statements WHERE match_status = 'matched' AND matched_payment_id IS NOT NULL)")
+          ]
         },
         attributes: [
           'id', 'type', 'category', 'amount', 'payment_date',

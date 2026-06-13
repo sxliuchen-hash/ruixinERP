@@ -287,18 +287,6 @@ class LoanService {
       throw new ValidationError('请选择还款日期');
     }
 
-    const amt = parseFloat(data.amount);
-    const currentRepaid = parseFloat(loan.repaid_amount) || 0;
-    const loanAmount = parseFloat(loan.amount) || 0;
-
-    // 已还 + 本次 超过借款金额时拦截（允许等于，即一次性还清）
-    if (currentRepaid + amt > loanAmount + 0.01) { // 加 0.01 容差避免浮点误差
-      const remaining = parseFloat((loanAmount - currentRepaid).toFixed(2));
-      throw new ValidationError(
-        `还款金额超出剩余应还（${remaining}），请核对金额`
-      );
-    }
-
     if (data.account_id) {
       const account = await BankAccount.findByPk(data.account_id);
       if (!account) {
@@ -309,7 +297,19 @@ class LoanService {
       }
     }
 
+    const amt = parseFloat(data.amount);
+
+    // 事务 + 行锁：锁定借款行后再校验「不超额」，避免并发还款各自读到旧 repaid_amount 导致超还
     const repayment = await sequelize.transaction(async (t) => {
+      const locked = await Loan.findByPk(loanId, { transaction: t, lock: t.LOCK.UPDATE });
+      const currentRepaid = parseFloat(locked.repaid_amount) || 0;
+      const loanAmount = parseFloat(locked.amount) || 0;
+      // 已还 + 本次 超过借款金额时拦截（允许等于，即一次性还清；0.01 容差避免浮点误差）
+      if (currentRepaid + amt > loanAmount + 0.01) {
+        const remaining = parseFloat((loanAmount - currentRepaid).toFixed(2));
+        throw new ValidationError(`还款金额超出剩余应还（${remaining}），请核对金额`);
+      }
+
       const rp = await LoanRepayment.create({
         loan_id: loan.id,
         amount: amt,
