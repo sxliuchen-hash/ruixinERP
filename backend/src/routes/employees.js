@@ -11,6 +11,8 @@ const router = express.Router();
 const { authenticate } = require('../middlewares/auth');
 const { requireAdmin } = require('../middlewares/permission');
 const { NotFoundError } = require('../utils/errors');
+const validate = require('../middlewares/validate');
+const { createEmployeeSchema, updateEmployeeSchema } = require('../validators/employee');
 const Employee = require('../models/Employee');
 
 router.use(authenticate);
@@ -42,7 +44,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST /employees - 新建员工
-router.post('/', async (req, res, next) => {
+router.post('/', validate(createEmployeeSchema), async (req, res, next) => {
   try {
     const employee = await Employee.create(req.body);
     res.json({ success: true, data: employee, message: '创建成功' });
@@ -50,7 +52,7 @@ router.post('/', async (req, res, next) => {
 });
 
 // PUT /employees/:id - 更新员工
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', validate(updateEmployeeSchema), async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
     if (!employee) throw new NotFoundError('员工不存在');
