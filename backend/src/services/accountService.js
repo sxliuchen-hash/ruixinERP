@@ -75,56 +75,28 @@ class AccountService {
    *   - 借款一旦录入即计入支出（无 confirm_status 机制）
    *   - 还款每笔均计入收入
    */
-  async calculateBalance(accountId, initialBalance = 0) {
-    // 收入合计（该账户的 income 类型 payments）
-    const [incomeResult] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE account_id = ? AND type = 'income'`,
-      { replacements: [accountId], type: QueryTypes.SELECT }
+  async calculateBalance(accountId, initialBalance = 0, transaction = null) {
+    // 用并列子查询一次性聚合全部资金流，避免逐项 N 次数据库往返；
+    // 传入 transaction 时在同一事务内读取（供转账余额校验等并发安全场景使用）
+    const [row] = await sequelize.query(
+      `SELECT
+         (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE account_id = :id AND type = 'income') AS income,
+         (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE account_id = :id AND type = 'expense') AS expense,
+         (SELECT COALESCE(SUM(amount), 0) FROM account_transfers WHERE to_account_id = :id) AS transfer_in,
+         (SELECT COALESCE(SUM(amount), 0) FROM account_transfers WHERE from_account_id = :id) AS transfer_out,
+         (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE account_id = :id AND confirm_status = 'confirmed') AS reimburse,
+         (SELECT COALESCE(SUM(amount), 0) FROM loans WHERE account_id = :id) AS loan_out,
+         (SELECT COALESCE(SUM(amount), 0) FROM loan_repayments WHERE account_id = :id) AS loan_in`,
+      { replacements: { id: accountId }, type: QueryTypes.SELECT, transaction }
     );
 
-    // 支出合计（该账户的 expense 类型 payments）
-    const [expenseResult] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE account_id = ? AND type = 'expense'`,
-      { replacements: [accountId], type: QueryTypes.SELECT }
-    );
-
-    // 转入合计
-    const [transferInResult] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM account_transfers WHERE to_account_id = ?`,
-      { replacements: [accountId], type: QueryTypes.SELECT }
-    );
-
-    // 转出合计
-    const [transferOutResult] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM account_transfers WHERE from_account_id = ?`,
-      { replacements: [accountId], type: QueryTypes.SELECT }
-    );
-
-    // T12：报销支出（仅 confirmed 计入）
-    const [expenseReimburseResult] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE account_id = ? AND confirm_status = 'confirmed'`,
-      { replacements: [accountId], type: QueryTypes.SELECT }
-    );
-
-    // T12：借款支出（一旦录入即视为已出账）
-    const [loanOutResult] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM loans WHERE account_id = ?`,
-      { replacements: [accountId], type: QueryTypes.SELECT }
-    );
-
-    // T12：还款收入
-    const [loanRepayResult] = await sequelize.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM loan_repayments WHERE account_id = ?`,
-      { replacements: [accountId], type: QueryTypes.SELECT }
-    );
-
-    const income = parseFloat(incomeResult.total) || 0;
-    const expense = parseFloat(expenseResult.total) || 0;
-    const transferIn = parseFloat(transferInResult.total) || 0;
-    const transferOut = parseFloat(transferOutResult.total) || 0;
-    const reimburse = parseFloat(expenseReimburseResult.total) || 0;
-    const loanOut = parseFloat(loanOutResult.total) || 0;
-    const loanIn = parseFloat(loanRepayResult.total) || 0;
+    const income = parseFloat(row.income) || 0;
+    const expense = parseFloat(row.expense) || 0;
+    const transferIn = parseFloat(row.transfer_in) || 0;
+    const transferOut = parseFloat(row.transfer_out) || 0;
+    const reimburse = parseFloat(row.reimburse) || 0;
+    const loanOut = parseFloat(row.loan_out) || 0;
+    const loanIn = parseFloat(row.loan_in) || 0;
     const initial = parseFloat(initialBalance) || 0;
 
     const balance = initial
