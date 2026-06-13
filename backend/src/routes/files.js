@@ -12,10 +12,15 @@
  * ============================================================
  */
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const COS = require('cos-nodejs-sdk-v5');
 const { authenticate } = require('../middlewares/auth');
 const { requireErpAccess } = require('../middlewares/permission');
+
+// 本地降级附件根目录（与 contractService 降级写入路径一致：backend/uploads）
+const UPLOADS_ROOT = path.resolve(__dirname, '../../uploads');
 
 router.use((req, res, next) => {
   // 支持 URL 参数传 token（用于文件预览/下载的新窗口场景）
@@ -38,7 +43,13 @@ router.get('/download', async (req, res, next) => {
       return res.status(400).json({ message: '缺少 key 参数' });
     }
 
-    // 安全检查：只允许下载 erp-files/ 目录下的文件
+    // 本地降级附件：经鉴权代理读取（替代已移除的 /uploads 公开静态目录）
+    const normalizedKey = String(key).replace(/^\/+/, '');
+    if (normalizedKey.startsWith('uploads/')) {
+      return serveLocalFile(normalizedKey, preview, res);
+    }
+
+    // 安全检查：COS 文件只允许下载 erp-files/ 目录下的
     if (!key.startsWith('erp-files/')) {
       return res.status(403).json({ message: '无权访问该文件' });
     }
@@ -75,6 +86,33 @@ router.get('/download', async (req, res, next) => {
     next(e);
   }
 });
+
+/**
+ * 读取本地 uploads 文件并响应（已经过 authenticate 鉴权），带路径穿越防护
+ */
+function serveLocalFile(normalizedKey, preview, res) {
+  const relative = normalizedKey.slice('uploads/'.length);
+  const target = path.resolve(UPLOADS_ROOT, relative);
+
+  // 防路径穿越：目标必须位于 uploads 根目录内
+  if (target !== UPLOADS_ROOT && !target.startsWith(UPLOADS_ROOT + path.sep)) {
+    return res.status(403).json({ message: '无权访问该文件' });
+  }
+  if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
+    return res.status(404).json({ message: '文件不存在' });
+  }
+
+  const buffer = fs.readFileSync(target);
+  const contentType = detectContentType(buffer, target);
+  const filename = path.basename(target);
+  res.setHeader('Content-Type', contentType);
+  if (preview === '1' && (contentType.includes('pdf') || contentType.includes('image'))) {
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+  } else {
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+  }
+  return res.end(buffer);
+}
 
 /**
  * 根据文件头 magic bytes 判断 Content-Type

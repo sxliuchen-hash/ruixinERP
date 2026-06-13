@@ -51,9 +51,8 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// 静态文件（合同附件等本地上传文件）
-const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// 合同/审批附件统一通过鉴权的 /api/v1/files 代理下载，
+// 不再以 express.static 公开 uploads 目录，避免未授权直接访问敏感附件
 
 // ==================== 路由 ====================
 
