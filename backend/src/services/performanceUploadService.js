@@ -205,6 +205,14 @@ class PerformanceUploadService {
       throw new Error(`存在 ${unmatched.length} 条未匹配员工的明细，请修正后再导入`);
     }
 
+    // 防重复：同年月已存在已确认批次时拒绝，避免提成基数被重复累加（工资多发）
+    const existedConfirmed = await PerformanceImport.findOne({
+      where: { year, month, status: 'confirmed' }
+    });
+    if (existedConfirmed) {
+      throw new Error(`${year}年${month}月已存在已确认的业绩批次（#${existedConfirmed.id}），如需重传请先删除旧批次`);
+    }
+
     return sequelize.transaction(async (t) => {
       const totalPerformance = records.reduce(
         (s, r) => s + (parseFloat(r.performance_amount) || 0), 0
