@@ -34,6 +34,8 @@ class WechatApiService {
   constructor() {
     // 进程内兜底缓存（Redis 不可用时用内存）
     this._memCache = { token: null, expireAt: 0 };
+    // 单飞：并发刷新 token 时复用同一 Promise
+    this._tokenPromise = null;
   }
 
   /**
@@ -53,17 +55,25 @@ class WechatApiService {
       if (cached) return cached;
     }
 
-    // 请求新 token
-    const url = `${wechatConfig.apiBase}/gettoken?corpid=${wechatConfig.corpId}&corpsecret=${wechatConfig.secret}`;
-    const data = await this._httpGet(url);
+    // 单飞：并发未命中缓存时复用同一次刷新请求，避免重复调用 gettoken
+    if (this._tokenPromise) return this._tokenPromise;
 
-    if (data.errcode !== 0 || !data.access_token) {
-      throw this._buildError('获取 access_token 失败', data);
+    this._tokenPromise = (async () => {
+      const url = `${wechatConfig.apiBase}/gettoken?corpid=${wechatConfig.corpId}&corpsecret=${wechatConfig.secret}`;
+      const data = await this._httpGet(url);
+      if (data.errcode !== 0 || !data.access_token) {
+        throw this._buildError('获取 access_token 失败', data);
+      }
+      await this._setCachedToken(data.access_token, wechatConfig.tokenCacheSeconds);
+      logger.info('[WechatApiService] access_token 已刷新');
+      return data.access_token;
+    })();
+
+    try {
+      return await this._tokenPromise;
+    } finally {
+      this._tokenPromise = null;
     }
-
-    await this._setCachedToken(data.access_token, wechatConfig.tokenCacheSeconds);
-    logger.info('[WechatApiService] access_token 已刷新');
-    return data.access_token;
   }
 
   /**

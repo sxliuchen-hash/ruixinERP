@@ -122,10 +122,8 @@ class IpSystemService {
       const result = this._handleResponse(response);
       if (result) return result;
     } catch (e) {
-      // 代查接口不可用时降级到旧接口
-      if (e.statusCode !== 404) {
-        // 如果不是 404，可能是代查接口还没部署，尝试旧接口
-      }
+      // 代查接口异常时降级到旧接口；记录原因便于排查（避免静默吞掉超时/认证错误）
+      logger.warn(`[ipSystem] 代查接口失败，降级到旧接口: ${e.message}`);
     }
 
     // 降级：尝试旧接口（只能查 IP 系统已录入的专利）

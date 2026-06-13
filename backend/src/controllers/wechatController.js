@@ -96,12 +96,15 @@ async function receiveCallback(req, res, next) {
       messagePreview: message.slice(0, 500)
     });
 
-    // T10 审批同步：解密后分发到 wechatSyncService
-    const wechatSyncService = require('../services/wechat/wechatSyncService');
-    const syncResult = await wechatSyncService.handleCallback(message);
-    logger.info('[Wechat Callback] 同步结果', syncResult);
-
+    // 先响应企微（要求 5 秒内响应），再异步处理同步，避免链路慢触发企微超时重试
     res.type('text/plain').send('success');
+
+    setImmediate(() => {
+      const wechatSyncService = require('../services/wechat/wechatSyncService');
+      wechatSyncService.handleCallback(message)
+        .then((syncResult) => logger.info('[Wechat Callback] 同步结果', syncResult))
+        .catch((e) => logger.error('[Wechat Callback] 异步同步失败', { error: e.message }));
+    });
   } catch (error) {
     logger.error('[Wechat Callback] 处理失败', { error: error.message, stack: error.stack });
     // 即使出错也响应 success，防止企微重试；错误已记日志
