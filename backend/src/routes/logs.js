@@ -40,10 +40,12 @@ router.get('/', async (req, res, next) => {
       { replacements: params, type: QueryTypes.SELECT }
     );
 
+    // 主项目库名取自配置，避免硬编码（支持库名变更/多环境部署）
+    const mainDb = process.env.MAIN_DB_NAME || 'patent_notice_system';
     const logs = await sequelize.query(
       `SELECT l.*, u.real_name as user_name
        FROM operation_logs l
-       LEFT JOIN patent_notice_system.users u ON u.id = l.user_id
+       LEFT JOIN \`${mainDb}\`.users u ON u.id = l.user_id
        WHERE ${where}
        ORDER BY l.create_time DESC
        LIMIT ? OFFSET ?`,
