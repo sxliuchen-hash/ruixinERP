@@ -41,7 +41,7 @@
  * ============================================================
  */
 
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 const Payment = require('../models/Payment');
 const Contract = require('../models/Contract');
@@ -472,16 +472,15 @@ class PaymentService {
   }
 
   /**
-   * 【私有】原子更新合同 paid_amount
+   * 【私有】原子更新合同 paid_amount（并发安全）
    *
    * 说明：
    *   - 必须传入外层事务对象 transaction，由调用方控制事务边界
    *   - delta 可正可负（-冲减，+增加），调用方自行保证正负号
-   *   - 若合同被软删除（status=terminated）则直接跳过（避免已终止合同数据污染）
-   *
-   * 注意并发：
-   *   目前用 findByPk → update 两步，极端高并发下可能出现丢失更新。
-   *   后续若 QPS 升高可改为 `paid_amount = paid_amount + ?` 的原子 SQL。
+   *   - 使用 `paid_amount = paid_amount + :delta` 单条原子 UPDATE，
+   *     避免「读取-计算-写回」两步在并发事务下相互覆盖（丢失更新）；
+   *     InnoDB 行锁会让并发更新串行化
+   *   - 合同不存在时影响 0 行，静默跳过，不阻断 payment 写入
    *
    * @param {number} contractId
    * @param {number} delta       变化量，正数增加负数减少
@@ -489,13 +488,16 @@ class PaymentService {
    * @returns {Promise<void>}
    */
   async _updateContractPaidAmount(contractId, delta, transaction) {
-    const contract = await Contract.findByPk(contractId, { transaction });
-    if (!contract) return; // 合同被删则静默跳过，不阻断 payment 写入
+    const amount = parseFloat(delta) || 0;
+    if (amount === 0) return;
 
-    const newPaid = parseFloat(contract.paid_amount || 0) + parseFloat(delta);
-    await contract.update(
-      { paid_amount: parseFloat(newPaid.toFixed(2)) },
-      { transaction }
+    await sequelize.query(
+      'UPDATE contracts SET paid_amount = ROUND(COALESCE(paid_amount, 0) + :delta, 2), update_time = NOW() WHERE id = :id',
+      {
+        replacements: { id: contractId, delta: amount },
+        type: QueryTypes.UPDATE,
+        transaction
+      }
     );
   }
 }
