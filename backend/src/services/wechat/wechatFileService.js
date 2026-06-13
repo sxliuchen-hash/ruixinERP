@@ -133,7 +133,7 @@ class WechatFileService {
     for (const file of files) {
       try {
         // 生成 COS 路径：erp-files/{type}/{sp_no}/{field}_{index}.bin
-        const safeField = file.field.replace(/[\/\\:*?"<>|]/g, '_');
+        const safeField = file.field.replace(/[/\\:*?"<>|]/g, '_');
         const cosKey = `erp-files/${type}/${spNo}/${safeField}_${file.index}.bin`;
 
         const result = await this.downloadAndUpload(file.file_id, cosKey);
