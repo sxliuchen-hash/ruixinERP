@@ -48,6 +48,18 @@
 5. agent 在 Dashboard 的数据隔离；Dashboard Redis 缓存 + 净利润指标卡。
 6. 其余前端页面（除合同详情外）的文件预览/下载切换为票据（当前仍用 `?token=`，后端已兼容）。
 
+### E. 交付物与里程碑（2026-06-13）
+- **里程碑**：本批全部成果已合入 `main`（最新 `61c136d`，与远程同步）。
+- **新增 / 更新文档**：
+  - `docs/项目知识图谱.md` —— 架构地图（模块映射 / ER 图 / 业务流程图）
+  - `docs/代码审查报告.md` —— 两轮 + 增量审查、修复状态表
+  - `docs/关键流程回归清单.md` —— 上线前回归步骤
+  - `docs/方案-URL-Token治理.md` —— 票据 + code 换 token 设计
+  - `docs/ci-workflow-reference.yml` —— CI 配置参考（待网页启用）
+- **工程化**：引入 ESLint；Jest 单测（26 用例，覆盖提成/个税/请假/进度/分页）；`backend/tests/integration/` 集成测试脚手架（默认跳过，配置测试库后启用）。
+- **质量门禁**：ESLint 全量 0 error；Jest 全绿；后端模块加载 LOAD-OK。
+- **待办（需人工）**：① GitHub 网页用 `docs/ci-workflow-reference.yml` 内容创建 `.github/workflows/ci.yml`（当前令牌缺 `workflow` 权限）；② 上线前按《关键流程回归清单》验证。
+
 ---
 
 ## 🆕 2026-06（人力薪资深化 + 安全增强）
