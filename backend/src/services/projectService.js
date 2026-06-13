@@ -261,16 +261,14 @@ class ProjectService {
   }
 
   /**
-   * 聚合刷新：从关联数据重算所有冗余字段 + 自动判断状态流转
+   * 【只读】从关联数据实时计算聚合值（不写库）
+   * 供 refreshAggregates 落库与 getProfitDetail 只读展示复用。
    *
    * @param {number} id 项目 ID
-   * @returns {Promise<Project>} 刷新后的项目实例
+   * @returns {Promise<{saleAmount:number,purchaseAmount:number,taxCost:number,maintainCost:number,grossProfit:number}>}
    */
-  async refreshAggregates(id) {
-    const project = await Project.findByPk(id);
-    if (!project) throw new NotFoundError('项目不存在');
-
-    // ===== 1) 销售合同金额 =====
+  async _computeAggregates(id) {
+    // 销售合同金额
     const [saleRow] = await sequelize.query(
       `SELECT COALESCE(SUM(amount), 0) AS total
        FROM contracts
@@ -279,7 +277,7 @@ class ProjectService {
     );
     const saleAmount = parseFloat(parseFloat(saleRow.total || 0).toFixed(2));
 
-    // ===== 2) 采购合同金额（用于计算 tax_cost） =====
+    // 采购合同金额（用于计算 tax_cost）
     const purchaseRows = await sequelize.query(
       `SELECT c.id, c.amount, s.tax_rate
        FROM contracts c
@@ -298,7 +296,7 @@ class ProjectService {
     purchaseAmount = parseFloat(purchaseAmount.toFixed(2));
     taxCost = parseFloat(taxCost.toFixed(2));
 
-    // ===== 3) 维持成本（本项目所有专利的年费总和） =====
+    // 维持成本（本项目所有专利的年费总和）
     const [maintainRow] = await sequelize.query(
       `SELECT COALESCE(SUM(f.amount), 0) AS total
        FROM patent_annual_fees f
@@ -308,10 +306,26 @@ class ProjectService {
     );
     const maintainCost = parseFloat(parseFloat(maintainRow.total || 0).toFixed(2));
 
-    // ===== 4) 毛利润 =====
+    // 毛利润
     const grossProfit = parseFloat((saleAmount - purchaseAmount - taxCost - maintainCost).toFixed(2));
 
-    // ===== 5) 状态自动流转 =====
+    return { saleAmount, purchaseAmount, taxCost, maintainCost, grossProfit };
+  }
+
+  /**
+   * 聚合刷新：从关联数据重算所有冗余字段 + 自动判断状态流转
+   *
+   * @param {number} id 项目 ID
+   * @returns {Promise<Project>} 刷新后的项目实例
+   */
+  async refreshAggregates(id) {
+    const project = await Project.findByPk(id);
+    if (!project) throw new NotFoundError('项目不存在');
+
+    const { saleAmount, purchaseAmount, taxCost, maintainCost, grossProfit } =
+      await this._computeAggregates(id);
+
+    // ===== 状态自动流转 =====
     // 规则：project.status === 'active' 且 至少有 1 个销售合同 且 所有销售合同均 completed → 项目 completed
     let nextStatus = project.status;
     if (project.status === 'active') {
@@ -362,15 +376,9 @@ class ProjectService {
     const project = await Project.findByPk(id);
     if (!project) throw new NotFoundError('项目不存在');
 
-    // 先强制刷新一次，保证数据最新
-    await this.refreshAggregates(id);
-    const refreshed = await Project.findByPk(id);
-
-    const saleAmount = parseFloat(refreshed.sale_amount) || 0;
-    const purchaseAmount = parseFloat(refreshed.purchase_amount) || 0;
-    const taxCost = parseFloat(refreshed.tax_cost) || 0;
-    const maintainCost = parseFloat(refreshed.maintain_cost) || 0;
-    const grossProfit = parseFloat(refreshed.gross_profit) || 0;
+    // 只读：实时计算聚合返回，不写库（落库由 refreshAggregates / 定时任务负责）
+    const { saleAmount, purchaseAmount, taxCost, maintainCost, grossProfit } =
+      await this._computeAggregates(id);
 
     // 关联合同
     const contracts = await Contract.findAll({
