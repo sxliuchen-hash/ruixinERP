@@ -1,5 +1,5 @@
 const { sequelize } = require('../config/database');
-const { QueryTypes } = require('sequelize');
+const { QueryTypes, Transaction } = require('sequelize');
 const BankAccount = require('../models/BankAccount');
 const AccountTransfer = require('../models/AccountTransfer');
 const { NotFoundError, ValidationError } = require('../utils/errors');
@@ -396,44 +396,57 @@ class AccountService {
       throw new ValidationError('转出账户和转入账户不能相同');
     }
 
-    if (!amount || amount <= 0) {
+    const transferAmount = parseFloat(amount);
+    if (!transferAmount || transferAmount <= 0) {
       throw new ValidationError('转账金额必须大于0');
     }
 
-    // 验证两个账户都存在且启用
-    const fromAccount = await BankAccount.findByPk(from_account_id);
-    if (!fromAccount) {
-      throw new NotFoundError('转出账户不存在');
-    }
-    if (fromAccount.status !== 1) {
-      throw new ValidationError('转出账户已停用');
-    }
+    // 事务 + 对转出账户行加锁（FOR UPDATE），把「校验余额 → 写入转账」串行化，
+    // 防止并发转账各自读到充足余额而同时出账导致超额（TOCTOU）。
+    // READ COMMITTED 保证拿到行锁后读取的是最新已提交余额。
+    return await sequelize.transaction(
+      { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
+      async (t) => {
+        // 锁定转出账户行，作为同一账户转账的互斥令牌
+        const fromAccount = await BankAccount.findByPk(from_account_id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE
+        });
+        if (!fromAccount) {
+          throw new NotFoundError('转出账户不存在');
+        }
+        if (fromAccount.status !== 1) {
+          throw new ValidationError('转出账户已停用');
+        }
 
-    const toAccount = await BankAccount.findByPk(to_account_id);
-    if (!toAccount) {
-      throw new NotFoundError('转入账户不存在');
-    }
-    if (toAccount.status !== 1) {
-      throw new ValidationError('转入账户已停用');
-    }
+        const toAccount = await BankAccount.findByPk(to_account_id, { transaction: t });
+        if (!toAccount) {
+          throw new NotFoundError('转入账户不存在');
+        }
+        if (toAccount.status !== 1) {
+          throw new ValidationError('转入账户已停用');
+        }
 
-    // 检查转出账户余额是否充足
-    const fromBalance = await this.calculateBalance(from_account_id, fromAccount.initial_balance);
-    if (fromBalance < amount) {
-      throw new ValidationError(`转出账户余额不足，当前余额: ${fromBalance}`);
-    }
+        // 在同一事务内核算余额（已包含此前已提交的转账/收付款）
+        const fromBalance = await this.calculateBalance(
+          from_account_id,
+          fromAccount.initial_balance,
+          t
+        );
+        if (fromBalance < transferAmount) {
+          throw new ValidationError(`转出账户余额不足，当前余额: ${fromBalance}`);
+        }
 
-    // 创建转账记录
-    const transfer = await AccountTransfer.create({
-      from_account_id,
-      to_account_id,
-      amount,
-      transfer_date: transfer_date || new Date(),
-      remark,
-      created_by: userId
-    });
-
-    return transfer;
+        return await AccountTransfer.create({
+          from_account_id,
+          to_account_id,
+          amount: transferAmount,
+          transfer_date: transfer_date || new Date(),
+          remark,
+          created_by: userId
+        }, { transaction: t });
+      }
+    );
   }
 }
 
