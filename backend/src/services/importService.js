@@ -54,7 +54,7 @@ const TEMPLATE_DEFS = {
       { header: '到期日期(YYYY-MM-DD)', key: 'expire_date', width: 18 },
       { header: '客户名称', key: 'customer_name', width: 20 },
       { header: '供应商名称', key: 'supplier_name', width: 20 },
-      { header: '状态(pending/active/completed/terminated)', key: 'status', width: 20 },
+      { header: '状态(draft/active/completed/terminated)', key: 'status', width: 20 },
       { header: '备注', key: 'remark', width: 30 }
     ],
     example: {
@@ -283,7 +283,7 @@ async function validateRow(type, data, rowIdx) {
       if (data.amount && (isNaN(parseFloat(data.amount)) || parseFloat(data.amount) < 0)) {
         errors.push('金额必须为非负数字');
       }
-      if (data.status && !['pending', 'active', 'completed', 'terminated'].includes(data.status)) {
+      if (data.status && !['draft', 'pending', 'active', 'completed', 'terminated'].includes(data.status)) {
         errors.push('状态值无效');
       }
       break;
@@ -419,6 +419,10 @@ async function importContract(data, userId, transaction) {
     if (supplier) supplier_id = supplier.id;
   }
 
+  // 合同模型枚举为 draft（无 pending）；模板历史使用 pending，做兼容映射避免整批导入因枚举报错回滚
+  let status = data.status || 'active';
+  if (status === 'pending') status = 'draft';
+
   const record = await Contract.create({
     contract_no: data.contract_no,
     type: data.type,
@@ -429,7 +433,7 @@ async function importContract(data, userId, transaction) {
     expire_date: data.expire_date || null,
     customer_id,
     supplier_id,
-    status: data.status || 'active',
+    status,
     remark: data.remark || null,
     created_by: userId
   }, { transaction });
