@@ -41,8 +41,11 @@ app.use(cors({
   credentials: true
 }));
 
-// 安全头
-app.use(helmet());
+// 安全头：显式声明 Referrer-Policy=no-referrer，
+// 避免 URL 中携带的 token（文件预览 / SSO 跳转场景）经 Referer 头泄漏到外部站点
+app.use(helmet({
+  referrerPolicy: { policy: 'no-referrer' }
+}));
 
 // 压缩
 app.use(compression());
