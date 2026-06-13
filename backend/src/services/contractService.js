@@ -102,21 +102,14 @@ class ContractService {
     result.remaining_amount = parseFloat((parseFloat(result.amount || 0) - parseFloat(result.paid_amount || 0)).toFixed(2));
 
     // 查询关联收付款记录
-    try {
-      const payments = await sequelize.query(
-        `SELECT id, type, amount, payment_date, payment_method, summary, confirm_status
-         FROM payments WHERE contract_id = ? ORDER BY payment_date DESC`,
-        { replacements: [id], type: QueryTypes.SELECT }
-      );
-      result.payments = payments;
-      result.payment_count = payments.length;
-      result.payment_total = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-    } catch (error) {
-      // payments 表可能尚未创建
-      result.payments = [];
-      result.payment_count = 0;
-      result.payment_total = 0;
-    }
+    const payments = await sequelize.query(
+      `SELECT id, type, amount, payment_date, payment_method, summary, confirm_status
+       FROM payments WHERE contract_id = ? ORDER BY payment_date DESC`,
+      { replacements: [id], type: QueryTypes.SELECT }
+    );
+    result.payments = payments;
+    result.payment_count = payments.length;
+    result.payment_total = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
     // 发票统计
     result.invoice_count = (result.invoices || []).length;
@@ -210,17 +203,12 @@ class ContractService {
     }
 
     // 已有收付款的合同不允许删除
-    try {
-      const [result] = await sequelize.query(
-        'SELECT COUNT(*) AS cnt FROM payments WHERE contract_id = ?',
-        { replacements: [id], type: QueryTypes.SELECT }
-      );
-      if (parseInt(result.cnt, 10) > 0) {
-        throw new ValidationError('该合同已有关联收付款记录，不允许删除');
-      }
-    } catch (error) {
-      // payments 表可能不存在，忽略
-      if (error instanceof ValidationError) throw error;
+    const [{ cnt }] = await sequelize.query(
+      'SELECT COUNT(*) AS cnt FROM payments WHERE contract_id = ?',
+      { replacements: [id], type: QueryTypes.SELECT }
+    );
+    if (parseInt(cnt, 10) > 0) {
+      throw new ValidationError('该合同已有关联收付款记录，不允许删除');
     }
 
     await contract.update({ status: 'terminated' });
