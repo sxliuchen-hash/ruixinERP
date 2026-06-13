@@ -476,6 +476,26 @@ class PaymentService {
   }
 
   /**
+   * 对「已确认」的收付款应用联动副作用：
+   *   - 业务类(business)：累加关联合同 paid_amount
+   *   - 费用类(fee)：同步写入/更新 cost_record
+   * 供企微同步 / 历史导入等「绕过 create 主流程」的入口复用，避免冗余字段漂移。
+   *
+   * @param {Payment} payment 已落库的 payment 实例
+   * @param {import('sequelize').Transaction} [transaction]
+   */
+  async applyConfirmedSideEffects(payment, transaction) {
+    if (!payment || payment.confirm_status !== 'confirmed') return;
+    const amount = parseFloat(payment.amount) || 0;
+    if (payment.category === 'business' && payment.contract_id) {
+      await this._updateContractPaidAmount(payment.contract_id, amount, transaction);
+    }
+    if (payment.category === 'fee') {
+      await getCostService().syncFromPayment(payment, transaction);
+    }
+  }
+
+  /**
    * 【私有】原子更新合同 paid_amount（并发安全）
    *
    * 说明：

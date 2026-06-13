@@ -310,6 +310,13 @@ class WechatSyncService {
       created_by: createdBy
     });
 
+    // 联动：业务类累加采购合同 paid_amount，费用类同步 cost_record（与手动创建一致，避免应付虚高/成本漏算）
+    try {
+      await require('../paymentService').applyConfirmedSideEffects(payment);
+    } catch (e) {
+      logger.warn(`[WechatSync] 付款 ${spNo} 联动合同/成本失败: ${e.message}`);
+    }
+
     logger.info(`[WechatSync] 付款已创建: id=${payment.id}, sp_no=${spNo}, amount=${amount}`);
     return { action: 'created', type: 'payment', id: payment.id };
   }

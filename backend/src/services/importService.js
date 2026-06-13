@@ -496,6 +496,9 @@ async function importPayment(data, userId, transaction) {
     created_by: userId
   }, { transaction });
 
+  // 联动：业务类累加合同 paid_amount，费用类同步 cost_record（历史导入此前缺失，导致应付虚高/成本漏算）
+  await require('./paymentService').applyConfirmedSideEffects(record, transaction);
+
   return { id: record.id };
 }
 
