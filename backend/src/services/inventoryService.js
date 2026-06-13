@@ -1153,11 +1153,14 @@ class InventoryService {
       const patentType = obj.patent_type || '';
       let cost = 0;
 
-      // 直接匹配
-      if (channelConfig[patentType] !== undefined) {
+      if (!patentType) {
+        // 未填专利类型：直接用 default，避免空串模糊匹配（''.includes/includes('')）误命中首个配置项
+        cost = parseFloat(channelConfig.default) || 0;
+      } else if (channelConfig[patentType] !== undefined) {
+        // 直接匹配
         cost = parseFloat(channelConfig[patentType]) || 0;
       } else {
-        // 模糊匹配
+        // 模糊匹配（patentType 非空才进入）
         let matched = false;
         for (const [key, value] of Object.entries(channelConfig)) {
           if (key === 'default') continue;
