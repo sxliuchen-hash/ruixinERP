@@ -189,185 +189,64 @@ class AccountService {
     const { page, limit, offset } = parsePagination(query);
     const { start_date, end_date } = query;
 
-    // 各来源的日期过滤片段（预先构造，防止下方 SQL 拼接混乱）
-    const dateFilter = {
-      payment:   '',
-      transfer:  '',
-      expense:   '',
-      loan:      '',
-      repayment: ''
-    };
-    const dateReps = []; // 日期占位的 ? 参数顺序
+    // 具名参数：同名占位符可在 SQL 中多次引用，无需再手动按顺序拼接参数数组
+    const replacements = { accountId, limit, offset };
+    if (start_date) replacements.start_date = start_date;
+    if (end_date) replacements.end_date = end_date;
 
-    if (start_date) {
-      dateFilter.payment   += ' AND payment_date >= ?';
-      dateFilter.transfer  += ' AND transfer_date >= ?';
-      dateFilter.expense   += ' AND expense_date >= ?';
-      dateFilter.loan      += ' AND loan_date >= ?';
-      dateFilter.repayment += ' AND repay_date >= ?';
-    }
-    if (end_date) {
-      dateFilter.payment   += ' AND payment_date <= ?';
-      dateFilter.transfer  += ' AND transfer_date <= ?';
-      dateFilter.expense   += ' AND expense_date <= ?';
-      dateFilter.loan      += ' AND loan_date <= ?';
-      dateFilter.repayment += ' AND repay_date <= ?';
-    }
-
-    // 将日期参数以每个来源各推两次的方式组装（count 和 list 查询相同顺序）
-    const pushDateReps = (reps) => {
-      // 顺序：payment, transfer_out, transfer_in, expense, loan, repayment
-      // 每个来源按存在的日期过滤各推一次
-      [5].forEach(() => {}); // 占位：注释用
-      if (start_date) reps.push(start_date);
-      if (end_date) reps.push(end_date);
+    // 各来源日期列不同，按需拼接区间过滤（统一引用 :start_date / :end_date）
+    const dateCond = (col) => {
+      let s = '';
+      if (start_date) s += ` AND ${col} >= :start_date`;
+      if (end_date) s += ` AND ${col} <= :end_date`;
+      return s;
     };
 
-    // 为 count 构造 replacements
-    const countReps = [accountId];
-    pushDateReps(countReps);
-    countReps.push(accountId);
-    pushDateReps(countReps);
-    countReps.push(accountId);
-    pushDateReps(countReps);
-    countReps.push(accountId);
-    pushDateReps(countReps);
-    countReps.push(accountId);
-    pushDateReps(countReps);
-    countReps.push(accountId);
-    pushDateReps(countReps);
-
-    const countSql = `
-      SELECT COUNT(*) AS total FROM (
-        SELECT id FROM payments WHERE account_id = ? ${dateFilter.payment}
-        UNION ALL
-        SELECT id FROM account_transfers WHERE from_account_id = ? ${dateFilter.transfer}
-        UNION ALL
-        SELECT id FROM account_transfers WHERE to_account_id = ? ${dateFilter.transfer}
-        UNION ALL
-        SELECT id FROM expenses WHERE account_id = ? AND confirm_status = 'confirmed' ${dateFilter.expense}
-        UNION ALL
-        SELECT id FROM loans WHERE account_id = ? ${dateFilter.loan}
-        UNION ALL
-        SELECT id FROM loan_repayments WHERE account_id = ? ${dateFilter.repayment}
-      ) AS combined
-    `;
-    const [countResult] = await sequelize.query(countSql, {
-      replacements: countReps,
-      type: QueryTypes.SELECT
-    });
-    const total = countResult.total;
-
-    // 为 list 构造 replacements（同 count 顺序 + 末尾 limit/offset）
-    const listReps = [accountId];
-    pushDateReps(listReps);
-    listReps.push(accountId);
-    pushDateReps(listReps);
-    listReps.push(accountId);
-    pushDateReps(listReps);
-    listReps.push(accountId);
-    pushDateReps(listReps);
-    listReps.push(accountId);
-    pushDateReps(listReps);
-    listReps.push(accountId);
-    pushDateReps(listReps);
-    listReps.push(limit, offset);
-
-    const flowSql = `
-      SELECT * FROM (
-        SELECT
-          p.id,
-          'payment' AS source_type,
-          p.type AS flow_type,
-          p.amount,
-          p.payment_date AS flow_date,
-          p.summary,
-          p.remark,
-          p.create_time
+    // 六类资金流统一为一个 UNION ALL 子查询，count 与 list 复用同一段 SQL
+    const unionSql = `
+      SELECT p.id, 'payment' AS source_type, p.type AS flow_type, p.amount,
+             p.payment_date AS flow_date, p.summary, p.remark, p.create_time
         FROM payments p
-        WHERE p.account_id = ? ${dateFilter.payment.replace(/payment_date/g, 'p.payment_date')}
-
-        UNION ALL
-
-        SELECT
-          t.id,
-          'transfer_out' AS source_type,
-          'expense' AS flow_type,
-          t.amount,
-          t.transfer_date AS flow_date,
-          CONCAT('转出至账户ID:', t.to_account_id) AS summary,
-          t.remark,
-          t.create_time
+       WHERE p.account_id = :accountId ${dateCond('p.payment_date')}
+      UNION ALL
+      SELECT t.id, 'transfer_out', 'expense', t.amount,
+             t.transfer_date, CONCAT('转出至账户ID:', t.to_account_id), t.remark, t.create_time
         FROM account_transfers t
-        WHERE t.from_account_id = ? ${dateFilter.transfer.replace(/transfer_date/g, 't.transfer_date')}
-
-        UNION ALL
-
-        SELECT
-          t.id,
-          'transfer_in' AS source_type,
-          'income' AS flow_type,
-          t.amount,
-          t.transfer_date AS flow_date,
-          CONCAT('从账户ID:', t.from_account_id, '转入') AS summary,
-          t.remark,
-          t.create_time
+       WHERE t.from_account_id = :accountId ${dateCond('t.transfer_date')}
+      UNION ALL
+      SELECT t.id, 'transfer_in', 'income', t.amount,
+             t.transfer_date, CONCAT('从账户ID:', t.from_account_id, '转入'), t.remark, t.create_time
         FROM account_transfers t
-        WHERE t.to_account_id = ? ${dateFilter.transfer.replace(/transfer_date/g, 't.transfer_date')}
-
-        UNION ALL
-
-        SELECT
-          e.id,
-          'expense' AS source_type,
-          'expense' AS flow_type,
-          e.amount,
-          e.expense_date AS flow_date,
-          e.summary,
-          e.remark,
-          e.create_time
+       WHERE t.to_account_id = :accountId ${dateCond('t.transfer_date')}
+      UNION ALL
+      SELECT e.id, 'expense', 'expense', e.amount,
+             e.expense_date, e.summary, e.remark, e.create_time
         FROM expenses e
-        WHERE e.account_id = ? AND e.confirm_status = 'confirmed'
-          ${dateFilter.expense.replace(/expense_date/g, 'e.expense_date')}
-
-        UNION ALL
-
-        SELECT
-          l.id,
-          'loan' AS source_type,
-          'expense' AS flow_type,
-          l.amount,
-          l.loan_date AS flow_date,
-          CONCAT('借款：', COALESCE(l.purpose, '')) AS summary,
-          l.remark,
-          l.create_time
+       WHERE e.account_id = :accountId AND e.confirm_status = 'confirmed' ${dateCond('e.expense_date')}
+      UNION ALL
+      SELECT l.id, 'loan', 'expense', l.amount,
+             l.loan_date, CONCAT('借款：', COALESCE(l.purpose, '')), l.remark, l.create_time
         FROM loans l
-        WHERE l.account_id = ?
-          ${dateFilter.loan.replace(/loan_date/g, 'l.loan_date')}
-
-        UNION ALL
-
-        SELECT
-          r.id,
-          'loan_repayment' AS source_type,
-          'income' AS flow_type,
-          r.amount,
-          r.repay_date AS flow_date,
-          CONCAT('还款（借款ID:', r.loan_id, '）') AS summary,
-          r.remark,
-          r.create_time
+       WHERE l.account_id = :accountId ${dateCond('l.loan_date')}
+      UNION ALL
+      SELECT r.id, 'loan_repayment', 'income', r.amount,
+             r.repay_date, CONCAT('还款（借款ID:', r.loan_id, '）'), r.remark, r.create_time
         FROM loan_repayments r
-        WHERE r.account_id = ?
-          ${dateFilter.repayment.replace(/repay_date/g, 'r.repay_date')}
-      ) AS flow
-      ORDER BY flow_date DESC, create_time DESC
-      LIMIT ? OFFSET ?
+       WHERE r.account_id = :accountId ${dateCond('r.repay_date')}
     `;
 
-    const flows = await sequelize.query(flowSql, {
-      replacements: listReps,
-      type: QueryTypes.SELECT
-    });
+    const [countResult] = await sequelize.query(
+      `SELECT COUNT(*) AS total FROM (${unionSql}) AS combined`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+    const total = parseInt(countResult.total, 10) || 0;
+
+    const flows = await sequelize.query(
+      `SELECT * FROM (${unionSql}) AS flow
+        ORDER BY flow_date DESC, create_time DESC
+        LIMIT :limit OFFSET :offset`,
+      { replacements, type: QueryTypes.SELECT }
+    );
 
     const currentBalance = await this.calculateBalance(accountId, account.initial_balance);
 
