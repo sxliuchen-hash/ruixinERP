@@ -1,7 +1,50 @@
 # 内部财务管理系统 - 开发进度文档
 
-> 最后更新：2026-06-08
+> 最后更新：2026-06-13
 > 维护者：单会话接管开发
+
+---
+
+## 🆕 2026-06-13（全量代码审查 + 安全/性能/数据一致性优化 + Bug 修复）
+
+> 本轮在不改变业务功能的前提下，对后端全部 service/路由/定时任务/中间件与前端关键层做了**两轮系统审查**，
+> 并完成**优化加固**与**Bug 修复**，全部逐项独立提交（便于回滚）。
+> 验证：ESLint 全量 0 error；新增 Jest 单测 4 套件 / 26 用例通过。
+> 详见：`docs/代码审查报告.md`（含修复状态表）、`docs/项目知识图谱.md`（架构地图）。
+
+### A. 工程底座 + 优化加固（16 项，已提交并推送）
+| 类别 | 内容 |
+|------|------|
+| 工程化 | 引入 **ESLint** 配置；引入 **Jest** + 算钱逻辑单测（提成/个税/请假/合同进度/分页，26 用例） |
+| 安全 | 移除 `/uploads` 无鉴权静态暴露（统一走鉴权代理 `/files`）；CORS 白名单（不再退化为 `*`）；登录失败限流；`Referrer-Policy: no-referrer`；`employees` 补 joi 校验防 mass-assignment |
+| 数据一致性 | 合同 `paid_amount` 改**原子自增**（防并发丢失更新）；转账加**事务 + 行锁**（防 TOCTOU 超额）；新增**冗余字段对账校验定时任务**（每日 02:30 告警漂移） |
+| 性能 | 账户余额 7 条 SQL → **单条并列子查询**；`getFlow` 具名参数重构（删约 120 行脆弱代码）；`getProfitDetail` 只读化（不再查询时写库） |
+| 规范 | 跨库 JOIN 库名改用 `MAIN_DB_NAME` 配置；`employees` 统一错误响应；`.env.example` 脱敏；清理开发期防御残留 |
+
+### B. Bug 修复（按审查报告，已提交并推送）
+| 级别 | 修复 | 提交 |
+|------|------|------|
+| P0 | 企微同步 `syncPayment` / 历史导入 `importPayment` 复用 `paymentService.applyConfirmedSideEffects`，补回**合同 paid_amount + cost_record 联动**（根因） | `de3cac4` |
+| P0 | 空 `patent_type` 渠道成本误取首个配置 → 取 `default` | `073b8ab` |
+| P0 | 业绩确认入库前**校验同年月已确认批次**，防提成重复累加 | `77f4c79` |
+| P0 | 合同导入 `pending` 兼容映射为 `draft`，避免整批失败 | `bfb2c45` |
+| P1 | **详情接口 `getDetail` 补 agent 数据隔离**（payment/inventory/loan/expense/project），修复越权读 | `d11956a` |
+| P1 | 对账手动匹配校验 payment 未被其他流水占用 | `11f2c78` |
+| P1 | 前端 `isFinance` 角色 `finance`→`process` | `1c0504f` |
+| P1 | 企微回调 `WECHAT_TOKEN` 为空时拒绝验签，防伪造 | `6c764ae` |
+| P2 | accounts 路由补 joi 校验；企微回调先响应后异步 + token 单飞 + IP 降级日志；合同提醒时区修正；对账任务对「直填维持成本」不再误报；客户/供应商往来账口径对齐 `active/completed`；去重 JSDoc | `950a83c` `5b588c3` `f35d632` |
+
+### C. 已确认为「非缺陷」（业务口径确认后无需改动）
+- **代理专利已售利润**：与分成口径无关，`actual_profit` 维持毛利口径。
+- **提成归属**：取决于「所属月」，`payrollService` 现用同月查询业绩即正确。
+
+### D. 后续计划 / 待改造（保留项，按需推进）
+1. **URL token 彻底治理（建议优先）**：文件下载 / SSO 跳转的 token 走 URL，根治需「一次性下载票据」或「code 换 token」，**需主项目 + 前端联调**，建议单独立项。
+2. 往来账详情三列表共用一个分页参数 → 拆分为各自分页或仅返回汇总+近 N 条。
+3. 对账 `getResult` 的 `extra` 跨批次展示偏多 → 排除所有已匹配 payment。
+4. `wechatSyncService.syncContract` 多步写入包事务（部分失败 + sp_no 幂等会漏建辅助记录）。
+5. `InventoryService.batchChangePrice` / `LoanService` 还款校验的并发行锁（低频，低优）。
+6. agent 在 Dashboard 的数据隔离；Dashboard Redis 缓存 + 净利润指标卡。
 
 ---
 
@@ -356,11 +399,11 @@ Phase 1-3 累积的优化项：
 | 高 | Dashboard Redis 缓存 | dashboardService | 第二阶段 Dashboard 深化时 |
 | 中 | 报销人/借款人/项目负责人下拉 | ExpenseList/LoanList/ProjectList（当前用 ID 输入） | T21 主项目用户接口就绪后 |
 | 中 | agent Dashboard 数据隔离 | dashboardService | 第二阶段 |
-| 中 | PaymentService 并发安全 | _updateContractPaidAmount | T18 前改原子 SQL |
+| ~~中~~ | ~~PaymentService 并发安全~~ | _updateContractPaidAmount | ✅ 已修复 2026-06-13（原子自增） |
 | 中 | LoanService 并发安全 | _refreshLoanAggregates（两步 select→update） | T18 前评估 |
 | 中 | InventoryService 并发安全 | changePrice / batchChangePrice / _refreshMaintainAggregates | T18 前评估 |
 | 中 | ProjectService 自动刷新 | Contract/Payment/AnnualFee CRUD 不联动 Project 刷新 | T18 前接入 after-save hook |
-| 中 | 账户余额聚合性能 | accountService.calculateBalance（多条 SUM） | T18 前考虑 Redis 缓存 |
+| ~~中~~ | ~~账户余额聚合性能~~ | accountService.calculateBalance | ✅ 已修复 2026-06-13（合并单查询） |
 | 中 | Dashboard 净利润指标卡 | Dashboard.vue（毛利润 - 成本 = 净利润） | 第二阶段 Dashboard 深化 |
 | 低 | 前端 bundle 拆分 | vite.config.js（首屏 1.2MB） | 上线前优化 |
 | 低 | 合同附件上传（COS） | Contract.attachment_url | T19/T20 |
@@ -373,6 +416,14 @@ Phase 1-3 累积的优化项：
 - ~~精确利润替换现金净额~~（✅ T16 完成）
 - ~~成本类别选择器（树形）~~（✅ T17 cascader 就位）
 - ~~Dashboard overview cost-breakdown 接入真实数据~~（✅ T17 完成）
+- ~~PaymentService 合同 paid_amount 并发安全~~（✅ 2026-06-13 原子自增）
+- ~~账户余额聚合性能（多条 SUM）~~（✅ 2026-06-13 合并单查询）
+- ~~转账并发超额（TOCTOU）~~（✅ 2026-06-13 事务 + 行锁）
+- ~~合同附件无鉴权暴露~~（✅ 2026-06-13 移除 /uploads 静态，统一走 /files 鉴权代理）
+- ~~详情接口 getDetail 越权读~~（✅ 2026-06-13 补 agent 数据隔离）
+- ~~企微同步/历史导入不联动 paid_amount/cost_record~~（✅ 2026-06-13 复用联动副作用）
+
+> 📌 2026-06-13 全量审查与修复详情见本文件顶部「全量代码审查」章节，以及 `docs/代码审查报告.md`、`docs/项目知识图谱.md`。
 
 ---
 
