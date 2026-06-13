@@ -60,6 +60,7 @@ async function run() {
               CAST(i.total_maintain_cost AS DECIMAL(14,2)) AS stored,
               COALESCE((SELECT SUM(f.amount) FROM patent_annual_fees f WHERE f.inventory_id = i.id), 0) AS actual
          FROM patent_inventory i
+        WHERE EXISTS (SELECT 1 FROM patent_annual_fees f2 WHERE f2.inventory_id = i.id)
      ) t WHERE ABS(t.stored - t.actual) > 0.01`,
     { type: QueryTypes.SELECT }
   );

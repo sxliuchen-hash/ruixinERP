@@ -185,7 +185,7 @@ class CustomerService {
     try {
       const [contractResult] = await sequelize.query(
         `SELECT COUNT(*) AS contract_count, COALESCE(SUM(amount), 0) AS contract_total 
-         FROM contracts WHERE customer_id = ?`,
+         FROM contracts WHERE customer_id = ? AND status IN ('active', 'completed')`,
         { replacements: [id], type: QueryTypes.SELECT }
       );
       contractCount = parseInt(contractResult.contract_count, 10) || 0;

@@ -37,17 +37,16 @@ async function run() {
   logger.info('[ContractReminderJob] 开始扫描');
 
   try {
-    // 计算 30 天后的截止日期
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    // 用本地（进程时区 Asia/Shanghai）日期，避免 toISOString 转 UTC 产生 ±1 天偏差
+    const now = new Date();
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const inDays = (n) => {
-      const d = new Date(today);
+      const d = new Date(now);
       d.setDate(d.getDate() + n);
-      return d.toISOString().slice(0, 10);
+      return fmt(d);
     };
 
-    const todayStr = today.toISOString().slice(0, 10);
+    const todayStr = fmt(now);
     const warningCutoff = inDays(WARNING_DAYS);
 
     // 查询 30 天内到期的 active 合同
@@ -64,9 +63,10 @@ async function run() {
 
     let created = 0;
     for (const c of contracts) {
-      // 计算距离到期还有多少天
-      const expireTime = new Date(c.expire_date).getTime();
-      const daysLeft = Math.ceil((expireTime - today.getTime()) / (24 * 3600 * 1000));
+      // 计算距离到期还有多少天（以 UTC 锚定的日期字符串相减，避免时区误差）
+      const daysLeft = Math.round(
+        (Date.parse(String(c.expire_date).slice(0, 10) + 'T00:00:00Z') - Date.parse(todayStr + 'T00:00:00Z')) / 86400000
+      );
 
       // 7 天内 → danger，30 天内 → warning
       const threshold = daysLeft <= DANGER_DAYS ? DANGER_DAYS : WARNING_DAYS;

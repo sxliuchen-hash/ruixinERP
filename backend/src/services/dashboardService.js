@@ -240,15 +240,6 @@ class DashboardService {
   }
 
   /**
-   * 成本构成：费用类 payments 按成本类别分组
-   *
-   * 关联查询 cost_categories 表获取类别名称（若表不存在则显示"未分类"）。
-   * Phase 1 期间 cost_categories 已有预置数据，故可直接关联。
-   *
-   * @param {Object} query {period, start, end}
-   * @returns {Promise<{list: Array, total: number, period: Object}>}
-   */
-  /**
    * 成本构成（按大类聚合）
    *
    * T17 起数据源从 payments 改为 cost_records（更完整，含固定月费和手动成本）
