@@ -39,12 +39,14 @@
 - **提成归属**：取决于「所属月」，`payrollService` 现用同月查询业绩即正确。
 
 ### D. 后续计划 / 待改造（保留项，按需推进）
-1. **URL token 彻底治理（建议优先）**：文件下载 / SSO 跳转的 token 走 URL，根治需「一次性下载票据」或「code 换 token」，**需主项目 + 前端联调**，建议单独立项。
-2. 往来账详情三列表共用一个分页参数 → 拆分为各自分页或仅返回汇总+近 N 条。
-3. 对账 `getResult` 的 `extra` 跨批次展示偏多 → 排除所有已匹配 payment。
-4. `wechatSyncService.syncContract` 多步写入包事务（部分失败 + sp_no 幂等会漏建辅助记录）。
-5. `InventoryService.batchChangePrice` / `LoanService` 还款校验的并发行锁（低频，低优）。
-6. agent 在 Dashboard 的数据隔离；Dashboard Redis 缓存 + 净利润指标卡。
+> **增量完成（2026-06-13）**：✅ 对账 `extra` 跨批次排除；✅ 借款还款事务 + 行锁；✅ 文件下载一次性票据（token 治理「文件」部分，前后端落地，保留 `?token=` 兼容）。
+
+1. **URL token 治理（剩 SSO 部分）**：文件下载已用一次性票据 ✅；剩 SSO「code 换 token」需主项目 + 前端联调。
+2. 往来账详情三列表共用一个分页参数 → 拆分为各自分页或仅返回汇总 + 近 N 条。
+3. `wechatSyncService.syncContract` 多步写入包事务（部分失败 + sp_no 幂等会漏建辅助记录）。
+4. `InventoryService.batchChangePrice` 并发行锁（低频，低优）。
+5. agent 在 Dashboard 的数据隔离；Dashboard Redis 缓存 + 净利润指标卡。
+6. 其余前端页面（除合同详情外）的文件预览/下载切换为票据（当前仍用 `?token=`，后端已兼容）。
 
 ---
 
