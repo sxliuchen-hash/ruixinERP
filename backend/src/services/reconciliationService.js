@@ -362,6 +362,18 @@ class ReconciliationService {
     const p = await Payment.findByPk(paymentId);
     if (!p) throw new NotFoundError('付款记录不存在');
 
+    // 防重复占用：该 payment 不能已被其他流水匹配（自动匹配已排除，手动匹配此前缺失该校验）
+    const occupied = await BankStatement.findOne({
+      where: {
+        matched_payment_id: paymentId,
+        match_status: 'matched',
+        id: { [Op.ne]: statementId }
+      }
+    });
+    if (occupied) {
+      throw new ValidationError(`该付款已被流水 #${occupied.id} 匹配，不能重复匹配`);
+    }
+
     // 基本合理性校验：账户一致、金额匹配
     if (p.account_id !== st.account_id) {
       throw new ValidationError('付款账户与流水账户不一致');
