@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middlewares/auth');
 const { requireAdmin } = require('../middlewares/permission');
+const { NotFoundError } = require('../utils/errors');
 const Employee = require('../models/Employee');
 
 router.use(authenticate);
@@ -35,7 +36,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: '员工不存在' });
+    if (!employee) throw new NotFoundError('员工不存在');
     res.json({ success: true, data: employee });
   } catch (e) { next(e); }
 });
@@ -52,7 +53,7 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: '员工不存在' });
+    if (!employee) throw new NotFoundError('员工不存在');
     await employee.update(req.body);
     res.json({ success: true, data: employee, message: '更新成功' });
   } catch (e) { next(e); }
@@ -62,7 +63,7 @@ router.put('/:id', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: '员工不存在' });
+    if (!employee) throw new NotFoundError('员工不存在');
     await employee.destroy();
     res.json({ success: true, message: '已删除' });
   } catch (e) { next(e); }
@@ -73,7 +74,7 @@ router.put('/:id/grade', async (req, res, next) => {
   try {
     const { grade } = req.body;
     const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: '员工不存在' });
+    if (!employee) throw new NotFoundError('员工不存在');
     await employee.update({ grade });
     res.json({ success: true, message: `职级已变更为 ${grade}` });
   } catch (e) { next(e); }
@@ -84,7 +85,7 @@ router.put('/:id/status', async (req, res, next) => {
   try {
     const { status, regular_date, resign_date } = req.body;
     const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: '员工不存在' });
+    if (!employee) throw new NotFoundError('员工不存在');
 
     const updateData = { status };
     if (status === 'regular' && regular_date) updateData.regular_date = regular_date;
