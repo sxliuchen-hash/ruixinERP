@@ -4,6 +4,7 @@
 -- 说明: Phase 1 基础表结构，包含预置数据
 -- 任务: Task 1.3 - 创建 erp_db 数据库 + 基础表
 --   - system_configs 系统配置表
+--   - system_settings JSON 业务参数表（含渠道销售成本默认值）
 --   - operation_logs 操作日志表
 --   - cost_categories 成本分类表（含预置数据）
 --   - classify_rules 自动归类规则表（含预置关键词）
@@ -40,6 +41,33 @@ INSERT INTO `system_configs` (`config_key`, `config_value`, `category`, `descrip
 ('contract_reminder_days', '30', 'reminder', '合同到期提醒天数'),
 ('wechat_sync_interval', '3600', 'wechat', '企业微信审批同步间隔（秒）'),
 ('system_version', '1.0.0', 'system', '系统版本号');
+
+-- ============================================================
+-- 1.1 system_settings JSON 业务参数表
+-- 与 scripts/run-system-settings-migration.js 的正式结构契约保持一致
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `system_settings` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `setting_key` VARCHAR(100) NOT NULL COMMENT '设置项键名',
+  `setting_value` JSON NOT NULL COMMENT '设置项值（JSON）',
+  `description` VARCHAR(500) DEFAULT NULL COMMENT '描述',
+  `category` VARCHAR(50) DEFAULT 'general' COMMENT '分类',
+  `updated_by` INT DEFAULT NULL COMMENT '最后修改人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_setting_key` (`setting_key`),
+  KEY `idx_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统设置';
+
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `description`, `category`)
+VALUES (
+  'channel_sales_cost',
+  '{"发明": 1000, "实用新型": 200, "外观": 200, "default": 500}',
+  '渠道销售成本（按专利类型）',
+  'inventory'
+)
+ON DUPLICATE KEY UPDATE `setting_key` = `setting_key`;
 
 -- ============================================================
 -- 2. operation_logs 操作日志表
@@ -190,6 +218,68 @@ CREATE TABLE IF NOT EXISTS `account_transfers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='账户间转账表';
 
 -- ============================================================
+-- 6A. employees 员工档案表
+-- 新库直接具备主项目 user_id 单列唯一约束；存量库由显式迁移补齐。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `employees` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `user_id` INT DEFAULT NULL COMMENT '关联主项目 users.id',
+  `wechat_userid` VARCHAR(50) DEFAULT NULL COMMENT '企微 userid',
+  `name` VARCHAR(50) NOT NULL COMMENT '姓名',
+  `role` ENUM('boss','partner','sales','purchase','admin') NOT NULL COMMENT '角色类型',
+  `status` ENUM('probation','regular','resigned') DEFAULT 'probation' COMMENT '员工状态',
+  `grade` ENUM('A','B','C','D','E') DEFAULT 'A' COMMENT '当前职级',
+  `region` VARCHAR(20) DEFAULT '西安' COMMENT '所在区域',
+  `hire_date` DATE DEFAULT NULL COMMENT '入职日期',
+  `regular_date` DATE DEFAULT NULL COMMENT '转正日期',
+  `resign_date` DATE DEFAULT NULL COMMENT '离职日期',
+  `base_salary` DECIMAL(10,2) DEFAULT 2400.00 COMMENT '基本工资',
+  `position_allowance` DECIMAL(10,2) DEFAULT 1000.00 COMMENT '岗位补贴',
+  `attendance_bonus` DECIMAL(10,2) DEFAULT 100.00 COMMENT '全勤奖',
+  `social_insurance_base` DECIMAL(10,2) DEFAULT 2120.00 COMMENT '社保基数',
+  `social_insurance_rate` DECIMAL(5,4) DEFAULT 0.1530 COMMENT '个人社保缴纳比例',
+  `partner_share_rate` DECIMAL(5,4) DEFAULT 0.0000 COMMENT '合伙人分成比例',
+  `remark` TEXT COMMENT '备注',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_employees_user_id` (`user_id`),
+  KEY `idx_employees_wechat_userid` (`wechat_userid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工档案表';
+
+-- ============================================================
+-- 6B. contracts 合同表
+-- 新库直接具备企微审批 sp_no 唯一约束；存量库由显式迁移补齐。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `contracts` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `contract_no` VARCHAR(50) DEFAULT NULL COMMENT '合同编号',
+  `type` ENUM('sale','purchase') DEFAULT NULL COMMENT '销售/采购',
+  `title` VARCHAR(200) DEFAULT NULL COMMENT '合同标题',
+  `customer_id` INT DEFAULT NULL COMMENT '客户ID',
+  `supplier_id` INT DEFAULT NULL COMMENT '供应商ID',
+  `amount` DECIMAL(12,2) NOT NULL COMMENT '合同金额',
+  `paid_amount` DECIMAL(12,2) DEFAULT 0.00 COMMENT '已收/已付金额',
+  `sign_date` DATE DEFAULT NULL COMMENT '签订日期',
+  `expire_date` DATE DEFAULT NULL COMMENT '到期日期',
+  `status` ENUM('draft','active','completed','terminated') DEFAULT 'draft' COMMENT '状态',
+  `project_id` INT DEFAULT NULL COMMENT '关联交易项目',
+  `attachment_url` VARCHAR(500) DEFAULT NULL COMMENT '合同扫描件地址',
+  `owner_id` INT DEFAULT NULL COMMENT '负责人',
+  `sp_no` VARCHAR(50) DEFAULT NULL COMMENT '关联企微审批单号',
+  `confirm_status` ENUM('pending','confirmed') DEFAULT 'confirmed' COMMENT '确认状态',
+  `remark` TEXT COMMENT '备注',
+  `created_by` INT DEFAULT NULL COMMENT '创建人',
+  `applyer_name` VARCHAR(50) DEFAULT NULL COMMENT '审批申请人姓名',
+  `our_company` VARCHAR(100) DEFAULT NULL COMMENT '我方签订公司名称',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `contract_no` (`contract_no`),
+  UNIQUE KEY `uk_contracts_sp_no` (`sp_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='合同表';
+
+-- ============================================================
 -- 7. payments 收付款表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `payments` (
@@ -199,7 +289,7 @@ CREATE TABLE IF NOT EXISTS `payments` (
   `amount` DECIMAL(12,2) NOT NULL COMMENT '金额',
   `payment_date` DATE NOT NULL COMMENT '收付款日期',
   `payment_method` ENUM('transfer','check','cash','other') DEFAULT 'transfer' COMMENT '方式',
-  `account_id` INT NOT NULL COMMENT '银行账户ID',
+  `account_id` INT DEFAULT NULL COMMENT '银行账户ID；企微 pending 记录可为空，confirmed 必须唯一解析',
   `contract_id` INT DEFAULT NULL COMMENT '关联合同（业务类）',
   `customer_id` INT DEFAULT NULL COMMENT '客户（收款时）',
   `supplier_id` INT DEFAULT NULL COMMENT '供应商（付款时）',
@@ -217,7 +307,7 @@ CREATE TABLE IF NOT EXISTS `payments` (
   KEY `idx_account_id` (`account_id`),
   KEY `idx_project_id` (`project_id`),
   KEY `idx_payment_date` (`payment_date`),
-  KEY `idx_sp_no` (`sp_no`),
+  UNIQUE KEY `uk_payments_sp_no` (`sp_no`),
   KEY `idx_confirm_status` (`confirm_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='收付款表';
 
@@ -265,7 +355,7 @@ CREATE TABLE IF NOT EXISTS `cost_records` (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `expenses` (
   `id` INT NOT NULL AUTO_INCREMENT,
-  `user_id` INT NOT NULL COMMENT '报销人（主项目 users.id）',
+  `user_id` INT DEFAULT NULL COMMENT '报销人（主项目 users.id；仅兼容策略允许 NULL）',
   `amount` DECIMAL(12,2) NOT NULL COMMENT '报销金额',
   `cost_category_id` INT DEFAULT NULL COMMENT '报销类别（cost_categories.id）',
   `expense_date` DATE NOT NULL COMMENT '费用发生日期',
@@ -282,7 +372,7 @@ CREATE TABLE IF NOT EXISTS `expenses` (
   KEY `idx_cost_category_id` (`cost_category_id`),
   KEY `idx_expense_date` (`expense_date`),
   KEY `idx_account_id` (`account_id`),
-  KEY `idx_sp_no` (`sp_no`),
+  UNIQUE KEY `uk_expenses_sp_no` (`sp_no`),
   KEY `idx_confirm_status` (`confirm_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='报销单表';
 
@@ -373,6 +463,7 @@ CREATE TABLE IF NOT EXISTS `patent_inventory` (
   `stock_out_date` DATE DEFAULT NULL COMMENT '出库日期',
   `remark` TEXT COMMENT '备注',
   `created_by` INT DEFAULT NULL COMMENT '创建人',
+  `purchaser_id` INT DEFAULT NULL COMMENT '采购人员(employees.id)',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -569,6 +660,12 @@ CREATE TABLE IF NOT EXISTS `performance_imports` (
   `record_count` INT DEFAULT 0 COMMENT '明细条数',
   `total_performance` DECIMAL(14,2) DEFAULT 0 COMMENT '核定业绩合计',
   `status` ENUM('draft','confirmed') DEFAULT 'draft' COMMENT '状态：草稿/已确认',
+  `confirmed_period_key` VARCHAR(16) GENERATED ALWAYS AS (
+    CASE WHEN `status` = 'confirmed'
+      THEN CONCAT(`year`, '-', LPAD(`month`, 2, '0'))
+      ELSE NULL
+    END
+  ) STORED COMMENT '仅已确认批次的年月唯一键',
   `uploaded_by` INT DEFAULT NULL COMMENT '上传人(users.id)',
   `confirmed_by` INT DEFAULT NULL COMMENT '确认人',
   `confirmed_at` DATETIME DEFAULT NULL COMMENT '确认时间',
@@ -577,7 +674,8 @@ CREATE TABLE IF NOT EXISTS `performance_imports` (
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   KEY `idx_year_month` (`year`,`month`),
-  KEY `idx_status` (`status`)
+  KEY `idx_status` (`status`),
+  UNIQUE KEY `uk_performance_imports_confirmed_period` (`confirmed_period_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业绩上传批次';
 
 -- 业绩明细表
@@ -607,5 +705,58 @@ CREATE TABLE IF NOT EXISTS `performance_records` (
   KEY `idx_year_month` (`year`,`month`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业绩明细';
 
--- 专利库存表新增采购人员字段（已存在时忽略错误）
--- ALTER TABLE `patent_inventory` ADD COLUMN `purchaser_id` INT DEFAULT NULL COMMENT '采购人员(employees.id)' AFTER `created_by`;
+-- ============================================================
+-- 薪酬规则配置表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `salary_rules` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `rule_type` VARCHAR(50) NOT NULL COMMENT '规则类型',
+  `rule_name` VARCHAR(100) NOT NULL COMMENT '规则名称',
+  `rule_data` JSON NOT NULL COMMENT '规则参数(JSON)',
+  `remark` TEXT DEFAULT NULL COMMENT '备注说明',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_salary_rules_rule_type` (`rule_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='薪酬规则配置表';
+
+-- ============================================================
+-- 员工月度工资条
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `payrolls` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `employee_id` INT NOT NULL COMMENT '员工ID',
+  `year` INT NOT NULL COMMENT '年份',
+  `month` INT NOT NULL COMMENT '月份(1-12)',
+  `base_salary` DECIMAL(10,2) DEFAULT 0.00 COMMENT '基本工资',
+  `position_allowance` DECIMAL(10,2) DEFAULT 0.00 COMMENT '岗位津贴',
+  `attendance_bonus` DECIMAL(10,2) DEFAULT 0.00 COMMENT '全勤奖',
+  `grade_allowance` DECIMAL(10,2) DEFAULT 0.00 COMMENT '职级津贴',
+  `commission` DECIMAL(10,2) DEFAULT 0.00 COMMENT '业务提成',
+  `purchase_commission` DECIMAL(10,2) DEFAULT 0.00 COMMENT '采购提成',
+  `bonus` DECIMAL(10,2) DEFAULT 0.00 COMMENT '奖金',
+  `social_insurance` DECIMAL(10,2) DEFAULT 0.00 COMMENT '社保公积金扣除',
+  `income_tax` DECIMAL(10,2) DEFAULT 0.00 COMMENT '个人所得税',
+  `leave_days` DECIMAL(4,1) DEFAULT 0.0 COMMENT '请假总天数',
+  `personal_leave_days` DECIMAL(4,1) DEFAULT 0.0 COMMENT '事假天数',
+  `sick_leave_days` DECIMAL(4,1) DEFAULT 0.0 COMMENT '病假天数',
+  `leave_deduction` DECIMAL(10,2) DEFAULT 0.00 COMMENT '请假扣款',
+  `other_deduction` DECIMAL(10,2) DEFAULT 0.00 COMMENT '其他扣款',
+  `gross_income` DECIMAL(10,2) DEFAULT 0.00 COMMENT '应发合计',
+  `total_deduction` DECIMAL(10,2) DEFAULT 0.00 COMMENT '扣除合计',
+  `net_salary` DECIMAL(10,2) DEFAULT 0.00 COMMENT '实发合计',
+  `monthly_profit` DECIMAL(12,2) DEFAULT 0.00 COMMENT '当月业绩毛利',
+  `contract_count` INT DEFAULT 0 COMMENT '当月签约数',
+  `status` ENUM('draft','confirmed','paid','voided') DEFAULT 'draft' COMMENT '工资条状态',
+  `is_adjustment` TINYINT(1) DEFAULT 0 COMMENT '是否调整项工资条',
+  `adjust_source_id` INT DEFAULT NULL COMMENT '调整项关联的原工资条ID',
+  `voided_reason` VARCHAR(255) DEFAULT NULL COMMENT '作废原因',
+  `remark` TEXT DEFAULT NULL COMMENT '备注',
+  `confirmed_by` INT DEFAULT NULL COMMENT '确认人',
+  `confirmed_at` DATETIME DEFAULT NULL COMMENT '确认时间',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_payrolls_employee_period` (`employee_id`, `year`, `month`),
+  KEY `idx_payrolls_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='员工月度工资条';

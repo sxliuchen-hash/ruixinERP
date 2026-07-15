@@ -1,9 +1,10 @@
 <template>
-  <el-tooltip content="切换到官文通知系统" placement="bottom">
+  <el-tooltip v-if="mainSystemUrl" content="切换到官文通知系统" placement="bottom">
     <el-button
       class="system-switch-btn"
       text
       type="primary"
+      aria-label="在新窗口打开官文通知系统"
       @click="switchToMainSystem"
     >
       <el-icon><Switch /></el-icon>
@@ -14,16 +15,17 @@
 
 <script setup>
 import { Switch } from '@element-plus/icons-vue'
-import { useUserStore } from '@/stores/user'
+import { normalizeExternalHttpUrl } from '@/utils/externalNavigation'
 
-const userStore = useUserStore()
-
-const MAIN_SYSTEM_URL = import.meta.env.VITE_MAIN_SYSTEM_URL || 'https://iptt.top'
+const MAIN_SYSTEM_URL = normalizeExternalHttpUrl(
+  import.meta.env.VITE_MAIN_SYSTEM_URL,
+  'https://iptt.top'
+)
+const mainSystemUrl = MAIN_SYSTEM_URL
 
 function switchToMainSystem() {
-  // Pass token via URL for SSO between systems
-  const url = `${MAIN_SYSTEM_URL}?token=${encodeURIComponent(userStore.token)}`
-  window.open(url, '_blank')
+  const opened = window.open(MAIN_SYSTEM_URL, '_blank', 'noopener,noreferrer')
+  if (opened) opened.opener = null
 }
 </script>
 

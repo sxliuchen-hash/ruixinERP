@@ -20,7 +20,7 @@
           <el-option label="启用" :value="1" />
           <el-option label="停用" :value="0" />
         </el-select>
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.ACCOUNT_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建账户
         </el-button>
       </div>
@@ -46,6 +46,7 @@
       <el-table-column prop="status" label="状态" width="80" align="center">
         <template #default="{ row }">
           <el-switch
+            :disabled="!can(PERMISSIONS.ACCOUNT_UPDATE)"
             :model-value="row.status === 1"
             @change="(val) => handleToggleStatus(row, val)"
             inline-prompt
@@ -56,10 +57,10 @@
       </el-table-column>
       <el-table-column label="操作" width="240" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="warning" link size="small" @click="handleSetBalance(row)">期初余额</el-button>
+          <el-button v-if="can(PERMISSIONS.ACCOUNT_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.ACCOUNT_ADJUST)" type="warning" link size="small" @click="handleSetBalance(row)">期初余额</el-button>
           <el-button type="success" link size="small" @click="handleViewFlow(row)">流水</el-button>
-          <el-button type="info" link size="small" @click="handleTransfer(row)">转账</el-button>
+          <el-button v-if="can(PERMISSIONS.ACCOUNT_TRANSFER)" type="info" link size="small" @click="handleTransfer(row)">转账</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -235,6 +236,11 @@ import {
 } from '@/api/account'
 import { formatMoney, formatDate } from '@/utils/format'
 import { ACCOUNT_TYPE_MAP } from '@/utils/constants'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // 列表相关
 const loading = ref(false)

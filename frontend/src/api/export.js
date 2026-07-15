@@ -36,6 +36,13 @@ export async function downloadExcel(path, params) {
     })
 
     if (!res.ok) {
+      if (res.status === 401) {
+        void userStore.expireSession('session_expired')
+        const sessionError = new Error('ERP 登录已过期')
+        sessionError.sessionExpired = true
+        throw sessionError
+      }
+
       // 尝试读取 JSON 错误消息
       let msg = `导出失败（HTTP ${res.status}）`
       try {
@@ -43,12 +50,7 @@ export async function downloadExcel(path, params) {
         msg = errData.message || msg
       } catch (_) { /* 非 JSON 响应 */ }
 
-      if (res.status === 401) {
-        ElMessage.error('登录已过期，请重新登录')
-        userStore.logout()
-      } else {
-        ElMessage.error(msg)
-      }
+      ElMessage.error(msg)
       throw new Error(msg)
     }
 
@@ -66,6 +68,7 @@ export async function downloadExcel(path, params) {
 
     ElMessage.success(`已下载：${filename}`)
   } catch (error) {
+    if (error.sessionExpired) throw error
     if (error.message && !error.message.startsWith('导出失败')) {
       ElMessage.error('导出失败：' + error.message)
     }

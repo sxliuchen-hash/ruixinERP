@@ -17,6 +17,13 @@ export async function downloadPerformanceTemplate() {
       headers: { Authorization: userStore.token ? `Bearer ${userStore.token}` : '' }
     })
     if (!res.ok) {
+      if (res.status === 401) {
+        void userStore.expireSession('session_expired')
+        const sessionError = new Error('ERP 登录已过期')
+        sessionError.sessionExpired = true
+        throw sessionError
+      }
+
       let msg = `下载失败（HTTP ${res.status}）`
       try { const e = await res.json(); msg = e.message || msg } catch (_) { /* noop */ }
       ElMessage.error(msg)
@@ -43,6 +50,7 @@ export async function downloadPerformanceTemplate() {
     setTimeout(() => window.URL.revokeObjectURL(link.href), 1000)
     ElMessage.success(`已下载：${filename}`)
   } catch (error) {
+    if (error.sessionExpired) throw error
     if (!String(error.message).startsWith('下载失败')) {
       ElMessage.error('模板下载失败：' + error.message)
     }

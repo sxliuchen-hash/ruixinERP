@@ -1,6 +1,6 @@
 /**
- * 同步所有模型表结构到数据库
- * 用法: node scripts/sync-tables.js
+ * 仅供本地开发库初始化/原型同步。生产环境必须使用显式迁移脚本。
+ * 用法: NODE_ENV=development node scripts/sync-tables.js
  */
 require('dotenv').config();
 const { connectDatabase } = require('../src/config/database');
@@ -11,7 +11,16 @@ const PerformanceImport = require('../src/models/PerformanceImport');
 const PerformanceRecord = require('../src/models/PerformanceRecord');
 const PatentInventory = require('../src/models/PatentInventory');
 
+function assertDevelopmentOnly(env = process.env) {
+  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production') {
+    const error = new Error('生产环境禁止 Sequelize sync/alter，请执行显式迁移脚本');
+    error.code = 'SEQUELIZE_SCHEMA_SYNC_PRODUCTION_FORBIDDEN';
+    throw error;
+  }
+}
+
 async function run() {
+  assertDevelopmentOnly();
   await connectDatabase();
   await Employee.sync({ force: false });
   console.log('✅ employees table synced');
@@ -31,7 +40,11 @@ async function run() {
   process.exit(0);
 }
 
-run().catch(e => {
-  console.error('❌ Failed:', e.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  run().catch(e => {
+    console.error(`❌ ${e.code || 'SCHEMA_SYNC_FAILED'}:`, e.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { assertDevelopmentOnly, run };

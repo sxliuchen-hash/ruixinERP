@@ -2,7 +2,7 @@
  * Dashboard 接口封装
  *
  * 后端前缀：/api/v1/dashboard（request.js 已配 baseURL）
- * 权限：authenticate + requireErpAccess（admin/process/agent 均可）
+ * 权限：erp.dashboard.view；是否可见与登录角色无关。
  */
 import request from './request'
 

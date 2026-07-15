@@ -3,7 +3,7 @@
  * 自动归类规则路由
  * ============================================================
  * 路由前缀：/api/v1/classify-rules
- * 权限：authenticate + admin
+ * 权限：authenticate + 归类规则细粒度权限
  *
  * classify_rules 表（关键词 → 成本类别）目前无独立 Sequelize 模型，
  * 这里用原生 SQL 操作（与 reconciliationService._suggestCategory 一致）。
@@ -20,14 +20,15 @@ const router = express.Router();
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { authenticate } = require('../middlewares/auth');
-const { requireAdmin } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 const { operationLog } = require('../middlewares/operationLog');
 
 router.use(authenticate);
-router.use(requireAdmin());
 
 // 列表
-router.get('/', async (req, res, next) => {
+router.get('/', requirePermission(PERMISSIONS.CLASSIFY_RULE_VIEW), async (req, res, next) => {
   try {
     const rows = await sequelize.query(
       `SELECT r.id, r.keyword, r.category_id, r.priority, r.status, r.create_time,
@@ -42,7 +43,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // 新增
-router.post('/', operationLog('create', 'classify_rules'), async (req, res, next) => {
+router.post('/', requirePermission(PERMISSIONS.CLASSIFY_RULE_CREATE), requireFreshPermissionVersion(), operationLog('create', 'classify_rules'), async (req, res, next) => {
   try {
     const { keyword, category_id, priority = 0, status = 1 } = req.body;
     if (!keyword || !category_id) {
@@ -58,7 +59,7 @@ router.post('/', operationLog('create', 'classify_rules'), async (req, res, next
 });
 
 // 更新
-router.put('/:id', operationLog('update', 'classify_rules'), async (req, res, next) => {
+router.put('/:id', requirePermission(PERMISSIONS.CLASSIFY_RULE_UPDATE), requireFreshPermissionVersion(), operationLog('update', 'classify_rules'), async (req, res, next) => {
   try {
     const { keyword, category_id, priority, status } = req.body;
     const sets = [];
@@ -79,7 +80,7 @@ router.put('/:id', operationLog('update', 'classify_rules'), async (req, res, ne
 });
 
 // 删除
-router.delete('/:id', operationLog('delete', 'classify_rules'), async (req, res, next) => {
+router.delete('/:id', requirePermission(PERMISSIONS.CLASSIFY_RULE_DELETE), requireFreshPermissionVersion(), operationLog('delete', 'classify_rules'), async (req, res, next) => {
   try {
     await sequelize.query(
       `DELETE FROM classify_rules WHERE id = :id`,

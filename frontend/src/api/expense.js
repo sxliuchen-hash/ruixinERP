@@ -2,8 +2,7 @@
  * 报销管理接口封装
  *
  * 后端前缀：/api/v1/expenses
- * 权限：authenticate + requireErpAccess + attachDataFilter
- *       （agent 仅能看/改自己 created_by 的记录）
+ * 权限：按 erp.expense.* 权限编码校验，并按 grant 的 self/team/all scope 过滤数据。
  */
 import request from './request'
 

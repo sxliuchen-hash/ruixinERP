@@ -10,10 +10,10 @@
     分页：标准
     弹窗：
       - 新建/编辑成本记录（cost_category_id 从类别树选）
-      - 类别管理（admin 可见）
+      - 类别管理（需对应 erp.cost.create/update/delete 权限）
   业务联动：
     - 费用类 payment 自动写 cost_record（后端 paymentService 已联动）
-    - 固定月费由 cron 每月 1 日自动生成；admin 也可手动触发
+    - 固定月费由 cron 每月 1 日自动生成；erp.cost.generate 可手动触发
   ============================================================
 -->
 <template>
@@ -66,22 +66,23 @@
           <el-option label="固定月费" :value="1" />
           <el-option label="一次性" :value="0" />
         </el-select>
-        <el-button @click="openCategoryDialog" v-if="userStore.isAdmin">
+        <el-button v-if="canAny([PERMISSIONS.COST_CREATE, PERMISSIONS.COST_UPDATE, PERMISSIONS.COST_DELETE])" @click="openCategoryDialog">
           <el-icon><Setting /></el-icon>类别管理
         </el-button>
         <ExportButton
           path="/export/costs"
           :params="exportParams"
+          :permission="PERMISSIONS.COST_EXPORT"
           label="导出"
         />
         <el-button
           type="warning"
           @click="handleGenerateRecurring"
-          v-if="userStore.isAdmin"
+          v-if="can(PERMISSIONS.COST_GENERATE)"
         >
           <el-icon><Refresh /></el-icon>生成固定月费
         </el-button>
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.COST_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建记录
         </el-button>
       </div>
@@ -184,6 +185,7 @@
       <el-table-column label="操作" width="140" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
+            v-if="can(PERMISSIONS.COST_UPDATE)"
             type="primary"
             link
             size="small"
@@ -191,6 +193,7 @@
             @click="handleEdit(row)"
           >编辑</el-button>
           <el-button
+            v-if="can(PERMISSIONS.COST_DELETE)"
             type="danger"
             link
             size="small"
@@ -297,7 +300,7 @@
       </template>
     </el-dialog>
 
-    <!-- ===== 类别管理抽屉（仅 admin）===== -->
+    <!-- ===== 类别管理抽屉（按 erp.cost.* 操作权限控制）===== -->
     <el-drawer
       v-model="categoryDrawerVisible"
       title="成本类别管理"
@@ -306,7 +309,7 @@
     >
       <div class="category-manage">
         <div style="margin-bottom: 12px; display: flex; justify-content: flex-end">
-          <el-button type="primary" size="small" @click="openCategoryCreate">
+          <el-button v-if="can(PERMISSIONS.COST_CREATE)" type="primary" size="small" @click="openCategoryCreate">
             <el-icon><Plus /></el-icon>新建类别
           </el-button>
         </div>
@@ -333,8 +336,8 @@
           </el-table-column>
           <el-table-column label="操作" width="140" align="center">
             <template #default="{ row }">
-              <el-button type="primary" link size="small" @click="openCategoryEdit(row)">编辑</el-button>
-              <el-button type="danger" link size="small" @click="handleCategoryDelete(row)">删除</el-button>
+              <el-button v-if="can(PERMISSIONS.COST_UPDATE)" type="primary" link size="small" @click="openCategoryEdit(row)">编辑</el-button>
+              <el-button v-if="can(PERMISSIONS.COST_DELETE)" type="danger" link size="small" @click="handleCategoryDelete(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -415,12 +418,15 @@ import {
 import { formatMoney } from '@/utils/format'
 import { COST_CATEGORY_TYPE_MAP } from '@/utils/constants'
 import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 import AccountSelect from '@/components/business/AccountSelect.vue'
 import CostTrendChart from './CostTrendChart.vue'
 import CostPieChart from '@/components/dashboard/CostPieChart.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
 
 const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
+const canAny = (permissionCodes) => userStore.canAny(permissionCodes)
 
 // ===== 列表状态 =====
 const loading = ref(false)

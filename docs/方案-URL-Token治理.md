@@ -1,8 +1,7 @@
 # 设计方案：URL Token 彻底治理
 
-> 背景：当前两处把 JWT 放在 URL 传递，存在泄漏面（浏览器历史 / Nginx access log / Referer）。
-> 本轮已做缓解（登录跳转 `replace` 即时移除、`Referrer-Policy: no-referrer`），本方案为**彻底治理**。
-> 状态：设计稿，待排期；涉及主项目 + 前端联调，建议单独立项。
+> 背景：旧版本曾在文件下载和跨系统登录 URL 中传递 JWT。
+> 状态：双方代码已完成 R7 治理；文件使用一次性 Ticket，SSO 使用 ERP 发起并绑定浏览器的 state + 主项目一次性 Code，代码不再接受 `?token=`。当前只待受控环境配置和真实联调。
 
 ---
 
@@ -10,8 +9,8 @@
 
 | 场景 | 现状 | 风险 |
 |------|------|------|
-| 文件预览/下载 | `GET /api/v1/files/download?key=...&token=<JWT>`（`<img>`/`window.open` 无法加 Header，只能塞 URL） | JWT（7 天有效）出现在新窗口 URL、access log |
-| SSO 登录跳转 | 主项目跳转 `erp.iptt.top/?token=<JWT>`，前端读取后 `replace` 移除 | 首跳 URL 进入 Nginx access log；Referer 已被 no-referrer 缓解 |
+| 文件预览/下载 | 已切换为 60 秒一次性 Ticket | 长效 JWT 不进入 URL |
+| SSO 登录跳转 | ERP `/sso/initiate` 生成 state，主项目 authorize 后回调 `/sso/callback?code=...&state=...` | 等待环境地址、凭证、公钥和测试账号完成真实联调 |
 
 JWT 有效期 7 天，一旦泄漏窗口较大。
 
@@ -27,25 +26,27 @@ JWT 有效期 7 天，一旦泄漏窗口较大。
 ## 三、方案
 
 ### 方案 A（推荐）：文件下载「一次性票据 Ticket」
-- 新增 `POST /api/v1/files/ticket`（需正常 JWT 鉴权，Body: `{ key }`）：
-  - 服务端校验该用户对 `key` 的访问权限；
-  - 生成随机 `ticket`（如 32 字节 hex），存 Redis：`erp:file_ticket:{ticket} → { key, userId }`，TTL 60s，一次性；
+- 新增 `POST /api/v1/files/ticket`（需正常 JWT 鉴权，Body: `{ key, resourceType, resourceId }`）：
+  - 服务端同时校验 `erp.file.download`、资源查看权限及 `self/team/all`；当前合同附件会验证合同 scope 和 key 确实属于该合同；
+  - 生成随机 `ticket`（当前为 24 字节随机值的 hex），在 Redis 保存 key、用户、权限版本、资源和 scope 快照，TTL 60s，一次性；
   - 返回 `{ ticket }`。
 - 改造 `GET /api/v1/files/download?ticket=<ticket>`：
-  - 从 Redis 取并**立即删除**（用 `GETDEL` 或 `MULTI`），校验通过后返回文件流；
+  - 通过 Redis Lua 在一次原子操作中 `GET + DEL`，校验通过后返回文件流；
   - 票据 60s 过期 + 用后即焚 → URL 即使被记录也很快失效。
-- 兼容：保留 `?token=` 一段时间（灰度），前端切换完成后下线。
+- `?token=` 兼容已经下线，Redis 不可用时返回错误，不回退长效 Token。
 
 前端改造（`ContractDetail.vue` 等）：
 ```
-预览/下载前：const { ticket } = await api.post('/files/ticket', { key })
+预览/下载前：const { ticket } = await api.post('/files/ticket', { key, resourceType: 'contract', resourceId })
 然后 window.open(`/api/v1/files/download?ticket=${ticket}`)
 ```
 
-### 方案 B（推荐）：SSO 登录「code 换 token」
-- 主项目侧：跳转前调内部接口生成一次性 `auth_code`（短 TTL，绑定 userId），跳转 `erp.iptt.top/sso?code=<code>`。
-- ERP 侧：`POST /api/v1/auth/exchange { code }` → 校验 code（与主项目共享存储 / 主项目提供校验接口）→ 换发 ERP JWT（走正常 body，不进 URL）。
-- code 一次性、30-60s 过期；URL 里只有短码，不含 JWT。
+### 方案 B（推荐）：R7 state + code 换 ERP 会话
+- 主项目入口先跳 ERP 固定 `/sso/initiate`；ERP 生成随机 state、Redis 只保存哈希，并用 Secure/HttpOnly/SameSite=Lax Cookie 绑定发起浏览器。
+- ERP 跳转主项目 `/sso/continue?app=erp&state=...`；主项目 authorize 生成 60 秒一次性 Code，固定绑定 userId/audience/redirectUri/state。
+- 主项目跳转 `erp.iptt.top/sso/callback?code=<code>&state=<state>`；ERP 回调页在网络请求前清除 URL/history，再调用 `POST /api/v1/auth/sso/exchange { code, state }`。
+- ERP 后端原子消费 state，随后携带 `authorizationCode/state/audience/redirectUri` 调用主项目内部兑换接口，验证 RS256 assertion 后签发 ERP 独立会话。
+- code/state 均一次性；缺 Cookie、跨浏览器、重复或并发消费、Redis 故障均 fail-closed。
 
 ### 方案 C（备选）：下载走 httpOnly Cookie
 - 登录时下发 httpOnly + Secure + SameSite Cookie，下载接口同时接受 Cookie 鉴权。
@@ -56,22 +57,22 @@ JWT 有效期 7 天，一旦泄漏窗口较大。
 
 ## 四、推荐组合
 - **文件**：方案 A（一次性票据），改造量小、收益直接、不依赖主项目。
-- **SSO**：方案 B（code 换 token），需主项目配合；过渡期保留 `?token=` 兼容。
+- **SSO**：方案 B（code 换 ERP 会话），需主项目完成 Code 签发；ERP 不保留 `?token=` 兼容。
 
 ---
 
 ## 五、实施步骤（建议顺序）
-1. 后端：`files/ticket` 接口 + Redis 票据 + `download` 支持 `ticket`（保留 `token` 兼容）。
-2. 前端：预览/下载改为「先取票据再打开」。
-3. 验证无 `?token=` 后，下线文件下载的 `token` 兼容分支。
-4. SSO：与主项目约定 `auth_code` 生成/校验，ERP 加 `/auth/exchange`，主项目改跳转。
-5. 全量切换后移除 SSO `?token=` 分支。
+1. 已完成：后端 `files/ticket` + Redis 一次性票据。
+2. 已完成：前端预览/下载先取票据再打开。
+3. 已完成：下线文件下载和前端路由的 `?token=` 分支。
+4. 已完成：ERP `/api/v1/auth/sso/initiate`、`/api/v1/auth/sso/exchange`、浏览器 state 绑定和 RS256 assertion 验签。
+5. 已完成：主项目 R7 authorize/exchange、一次性 Code、权限目录、团队范围和权限版本接口；待受控环境配置后联调。
 
 ## 六、工作量与风险
-- 文件票据：后端 ~0.5 天，前端 ~0.5 天，低风险（有兼容）。
-- SSO code：需主项目联调，~1-2 天，依赖跨系统排期。
-- Redis 依赖：票据存 Redis；Redis 不可用时可短时降级回 `token`（过渡期）。
+- 文件票据：已完成并下线旧兼容。
+- SSO code/state：代码已完成，剩余工作是环境配置、七类账号和跨系统验收。
+- Redis 依赖：票据存 Redis；Redis 不可用时文件票据签发失败，不降级为长效 Token。
 
 ## 七、验收
 - 抓取文件预览/下载的网络请求：URL 不含 JWT，仅含 60s 一次性 ticket；重复使用同一 ticket 失败。
-- SSO 跳转 URL 不含 JWT；code 重放失败。
+- SSO 跳转 URL 不含 JWT；跨浏览器 state、state/code 重放和并发重复消费均失败。

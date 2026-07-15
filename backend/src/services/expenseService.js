@@ -13,8 +13,8 @@
  *   - confirmed ：已确认，实时反映到账户余额
  *
  * 【数据隔离】
- *   agent 角色只能看/改自己 created_by 的记录，由路由 attachDataFilter 处理，
- *   service 层做兜底校验防止越权。
+ *   路由按权限 grant 生成 created_by 的 self/team/all 范围。
+ *   服务层缺失或收到非法 dataFilter 时必须 fail-closed。
  *
  * 【统计分析】
  *   - 按类别汇总（getCategorySummary）
@@ -32,6 +32,60 @@ const BankAccount = require('../models/BankAccount');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 const { parsePagination } = require('../utils/pagination');
 
+const DENY_DATA_FILTER = Object.freeze({ created_by: -1 });
+
+function normalizeDataFilter(dataFilter) {
+  if (!dataFilter || typeof dataFilter !== 'object' || Array.isArray(dataFilter)) {
+    return { ...DENY_DATA_FILTER };
+  }
+
+  const keys = Object.keys(dataFilter);
+  if (keys.length === 0) return {};
+  if (keys.length !== 1 || keys[0] !== 'created_by') return { ...DENY_DATA_FILTER };
+
+  const ownerScope = dataFilter.created_by;
+  if (Number.isInteger(Number(ownerScope))) {
+    return { created_by: Number(ownerScope) };
+  }
+
+  const teamIds = ownerScope && typeof ownerScope === 'object'
+    ? ownerScope[Op.in]
+    : null;
+  if (!Array.isArray(teamIds)) return { ...DENY_DATA_FILTER };
+
+  const normalizedIds = [...new Set(teamIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0))];
+
+  return normalizedIds.length > 0
+    ? { created_by: { [Op.in]: normalizedIds } }
+    : { ...DENY_DATA_FILTER };
+}
+
+function appendSqlDataFilter(where, replacements, dataFilter, alias = '') {
+  const normalized = normalizeDataFilter(dataFilter);
+  if (Object.keys(normalized).length === 0) return;
+
+  const column = alias ? `${alias}.created_by` : 'created_by';
+  const ownerScope = normalized.created_by;
+  if (Number.isInteger(ownerScope)) {
+    where.push(`${column} = :scope_created_by`);
+    replacements.scope_created_by = ownerScope;
+    return;
+  }
+
+  const teamIds = ownerScope && typeof ownerScope === 'object'
+    ? ownerScope[Op.in]
+    : null;
+  if (Array.isArray(teamIds) && teamIds.length > 0) {
+    where.push(`${column} IN (:scope_created_by_ids)`);
+    replacements.scope_created_by_ids = teamIds;
+    return;
+  }
+
+  where.push('1 = 0');
+}
+
 class ExpenseService {
   /**
    * 获取报销列表（分页 + 多维筛选）
@@ -44,22 +98,16 @@ class ExpenseService {
    * @param {string} [query.start_date]      起始日期（expense_date）
    * @param {string} [query.end_date]        截止日期
    * @param {string} [query.keyword]         关键词（summary/remark/sp_no 模糊匹配）
-   * @param {number} userId 当前用户 ID（数据隔离兜底）
-   * @param {string} userRole
+   * @param {Object} dataFilter attachPermissionDataScope 生成的范围
    */
-  async getList(query, userId, userRole) {
+  async getList(query, dataFilter) {
     const { page, limit, offset } = parsePagination(query);
     const {
       user_id, cost_category_id, account_id, confirm_status,
       start_date, end_date, keyword
     } = query;
 
-    const where = {};
-
-    // ===== 数据隔离（agent 只看自己创建的）=====
-    if (userRole === 'agent') {
-      where.created_by = userId;
-    }
+    const where = normalizeDataFilter(dataFilter);
 
     if (user_id) where.user_id = parseInt(user_id, 10);
     if (cost_category_id) where.cost_category_id = parseInt(cost_category_id, 10);
@@ -104,17 +152,14 @@ class ExpenseService {
   /**
    * 获取报销详情
    */
-  async getDetail(id, userId, userRole) {
-    const expense = await Expense.findByPk(id, {
+  async getDetail(id, dataFilter) {
+    const expense = await Expense.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) },
       include: [
         { model: BankAccount, as: 'account', attributes: ['id', 'name', 'account_type'] }
       ]
     });
     if (!expense) {
-      throw new NotFoundError('报销单不存在');
-    }
-    // 数据隔离：agent 仅能查看自己创建的记录
-    if (userRole === 'agent' && expense.created_by !== userId) {
       throw new NotFoundError('报销单不存在');
     }
     return expense;
@@ -173,14 +218,12 @@ class ExpenseService {
    *     账户余额由 accountService 实时聚合，所以单据更新不需要事务
    *   - 但仍要校验数据隔离和外键合法性
    */
-  async update(id, data, userId, userRole) {
-    const expense = await Expense.findByPk(id);
+  async update(id, data, dataFilter) {
+    const expense = await Expense.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!expense) {
       throw new NotFoundError('报销单不存在');
-    }
-
-    if (userRole === 'agent' && expense.created_by !== userId) {
-      throw new ValidationError('无权编辑该报销单');
     }
 
     if (data.account_id && data.account_id !== expense.account_id) {
@@ -208,14 +251,12 @@ class ExpenseService {
   /**
    * 删除报销单
    */
-  async delete(id, userId, userRole) {
-    const expense = await Expense.findByPk(id);
+  async delete(id, dataFilter) {
+    const expense = await Expense.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!expense) {
       throw new NotFoundError('报销单不存在');
-    }
-
-    if (userRole === 'agent' && expense.created_by !== userId) {
-      throw new ValidationError('无权删除该报销单');
     }
 
     await expense.destroy();
@@ -226,8 +267,10 @@ class ExpenseService {
    * 确认报销（pending → confirmed）
    * 用于企微审批同步来的 pending 记录的人工确认。
    */
-  async confirm(id) {
-    const expense = await Expense.findByPk(id);
+  async confirm(id, dataFilter) {
+    const expense = await Expense.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!expense) {
       throw new NotFoundError('报销单不存在');
     }
@@ -246,11 +289,12 @@ class ExpenseService {
    * @param {string} [query.end_date]
    * @returns {Promise<{list: Array, total: number}>}
    */
-  async getCategorySummary(query) {
+  async getCategorySummary(query, dataFilter) {
     const { start_date, end_date } = query || {};
 
     const where = ['e.confirm_status = :confirmed'];
     const replacements = { confirmed: 'confirmed' };
+    appendSqlDataFilter(where, replacements, dataFilter, 'e');
 
     if (start_date) {
       where.push('e.expense_date >= :start_date');
@@ -293,11 +337,12 @@ class ExpenseService {
   /**
    * 按报销人汇总（仅统计 confirmed）
    */
-  async getUserSummary(query) {
+  async getUserSummary(query, dataFilter) {
     const { start_date, end_date } = query || {};
 
     const where = ["confirm_status = :confirmed"];
     const replacements = { confirmed: 'confirmed' };
+    appendSqlDataFilter(where, replacements, dataFilter);
 
     if (start_date) {
       where.push('expense_date >= :start_date');
@@ -340,8 +385,15 @@ class ExpenseService {
    * @param {Object} query
    * @param {number} [query.months=12] 统计月数
    */
-  async getMonthlySummary(query) {
+  async getMonthlySummary(query, dataFilter) {
     const months = parseInt(query?.months, 10) || 12;
+
+    const where = [
+      "confirm_status = 'confirmed'",
+      'expense_date >= DATE_SUB(CURDATE(), INTERVAL :months MONTH)'
+    ];
+    const replacements = { months };
+    appendSqlDataFilter(where, replacements, dataFilter);
 
     const sql = `
       SELECT
@@ -349,14 +401,13 @@ class ExpenseService {
         COUNT(*) AS count,
         COALESCE(SUM(amount), 0) AS amount
       FROM expenses
-      WHERE confirm_status = 'confirmed'
-        AND expense_date >= DATE_SUB(CURDATE(), INTERVAL :months MONTH)
+      WHERE ${where.join(' AND ')}
       GROUP BY DATE_FORMAT(expense_date, '%Y-%m')
       ORDER BY month ASC
     `;
 
     const rows = await sequelize.query(sql, {
-      replacements: { months },
+      replacements,
       type: QueryTypes.SELECT
     });
 

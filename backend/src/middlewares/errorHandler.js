@@ -10,9 +10,11 @@ const errorHandler = (err, req, res, next) => {
   let statusCode = err.statusCode || 500;
   let message = err.message || '服务器内部错误';
   let code = err.code || 'INTERNAL_ERROR';
+  let safelyMappedExternalError = false;
 
   // Sequelize 验证错误
   if (err.name === 'SequelizeValidationError') {
+    safelyMappedExternalError = true;
     statusCode = 400;
     code = 'VALIDATION_ERROR';
     message = err.errors.map(e => e.message).join('; ');
@@ -20,6 +22,7 @@ const errorHandler = (err, req, res, next) => {
 
   // Sequelize 唯一约束错误
   if (err.name === 'SequelizeUniqueConstraintError') {
+    safelyMappedExternalError = true;
     statusCode = 409;
     code = 'DUPLICATE_ERROR';
     message = '数据已存在，请勿重复提交';
@@ -27,18 +30,31 @@ const errorHandler = (err, req, res, next) => {
 
   // JWT 错误
   if (err.name === 'JsonWebTokenError') {
+    safelyMappedExternalError = true;
     statusCode = 401;
     code = 'INVALID_TOKEN';
     message = '无效的认证令牌';
   }
 
   if (err.name === 'TokenExpiredError') {
+    safelyMappedExternalError = true;
     statusCode = 401;
     code = 'TOKEN_EXPIRED';
     message = '认证令牌已过期，请重新登录';
   }
 
-  // 记录错误日志
+  // 未知非业务异常在生产环境统一收敛，不能把库/网络错误码暴露给浏览器。
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !(err instanceof AppError) &&
+    !safelyMappedExternalError
+  ) {
+    statusCode = 500;
+    code = 'INTERNAL_ERROR';
+    message = '服务器内部错误';
+  }
+
+  // 记录错误日志；logger 会继续按敏感字段名和常见 Token 格式脱敏。
   if (statusCode >= 500) {
     logger.error('服务器错误:', {
       message: err.message,
@@ -54,11 +70,6 @@ const errorHandler = (err, req, res, next) => {
       url: req.originalUrl,
       method: req.method
     });
-  }
-
-  // 生产环境不暴露内部错误详情
-  if (process.env.NODE_ENV === 'production' && !(err instanceof AppError)) {
-    message = '服务器内部错误';
   }
 
   res.status(statusCode).json({

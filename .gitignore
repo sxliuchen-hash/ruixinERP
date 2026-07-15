@@ -1,8 +1,10 @@
 # Dependencies
 node_modules/
+.npm-cache/
 
 # Build output
 frontend/dist/
+tmp/
 
 # Environment files (contain secrets)
 backend/.env

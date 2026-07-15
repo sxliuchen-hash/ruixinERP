@@ -3,7 +3,7 @@
  * 业绩上传路由
  * ============================================================
  * 路由前缀：/api/v1/performance-import
- * 权限：authenticate + admin（业绩上传/确认仅管理员）
+ * 权限：authenticate + 业绩导入细粒度权限
  *
  * 接口：
  *   GET    /template            下载业绩统计表模板
@@ -18,7 +18,9 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { authenticate } = require('../middlewares/auth');
-const { requireAdmin } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 const { operationLog } = require('../middlewares/operationLog');
 const { sendExcel } = require('../utils/excelHelper');
 const performanceUploadService = require('../services/performanceUploadService');
@@ -41,10 +43,9 @@ const upload = multer({
 });
 
 router.use(authenticate);
-router.use(requireAdmin());
 
 // 下载模板
-router.get('/template', async (req, res, next) => {
+router.get('/template', requirePermission(PERMISSIONS.PERFORMANCE_IMPORT_VIEW), async (req, res, next) => {
   try {
     const { buffer, filename } = await performanceUploadService.generateTemplate();
     sendExcel(res, buffer, filename);
@@ -52,7 +53,7 @@ router.get('/template', async (req, res, next) => {
 });
 
 // 上传预览校验
-router.post('/validate', upload.single('file'), async (req, res, next) => {
+router.post('/validate', requirePermission(PERMISSIONS.PERFORMANCE_IMPORT_IMPORT), requireFreshPermissionVersion(), upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: '请上传文件' });
@@ -66,7 +67,7 @@ router.post('/validate', upload.single('file'), async (req, res, next) => {
 });
 
 // 确认入库
-router.post('/confirm', operationLog('create', 'performance_import'), async (req, res, next) => {
+router.post('/confirm', requirePermission(PERMISSIONS.PERFORMANCE_IMPORT_IMPORT), requireFreshPermissionVersion(), operationLog('create', 'performance_import'), async (req, res, next) => {
   try {
     const { year, month, file_name, records } = req.body;
     if (!year || !month) {
@@ -84,7 +85,7 @@ router.post('/confirm', operationLog('create', 'performance_import'), async (req
 });
 
 // 批次列表
-router.get('/batches', async (req, res, next) => {
+router.get('/batches', requirePermission(PERMISSIONS.PERFORMANCE_IMPORT_VIEW), async (req, res, next) => {
   try {
     const data = await performanceUploadService.listBatches(req.query);
     res.json({ success: true, data });
@@ -92,7 +93,7 @@ router.get('/batches', async (req, res, next) => {
 });
 
 // 批次明细
-router.get('/batches/:id', async (req, res, next) => {
+router.get('/batches/:id', requirePermission(PERMISSIONS.PERFORMANCE_IMPORT_VIEW), async (req, res, next) => {
   try {
     const data = await performanceUploadService.getBatchRecords(parseInt(req.params.id));
     res.json({ success: true, data });
@@ -100,7 +101,7 @@ router.get('/batches/:id', async (req, res, next) => {
 });
 
 // 删除批次
-router.delete('/batches/:id', operationLog('delete', 'performance_import'), async (req, res, next) => {
+router.delete('/batches/:id', requirePermission(PERMISSIONS.PERFORMANCE_IMPORT_DELETE), requireFreshPermissionVersion(), operationLog('delete', 'performance_import'), async (req, res, next) => {
   try {
     await performanceUploadService.removeBatch(parseInt(req.params.id));
     res.json({ success: true, message: '已删除批次' });

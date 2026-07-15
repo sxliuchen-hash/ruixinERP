@@ -2,7 +2,7 @@
   <div class="salary-rules-container">
     <div class="page-header">
       <h3>薪资规则配置</h3>
-      <el-button type="primary" @click="handleInit" :loading="initLoading">
+      <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" type="primary" @click="handleInit" :loading="initLoading">
         初始化默认规则
       </el-button>
     </div>
@@ -15,8 +15,8 @@
             <div class="card-header">
               <span>超额累进提成阶梯</span>
               <div>
-                <el-button size="small" @click="resetRule('commission')">恢复默认</el-button>
-                <el-button size="small" type="primary" @click="saveRule('commission')">保存</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_RESET)" size="small" @click="resetRule('commission')">恢复默认</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" size="small" type="primary" @click="saveRule('commission')">保存</el-button>
               </div>
             </div>
           </template>
@@ -49,11 +49,11 @@
             </el-table-column>
             <el-table-column label="操作" width="80" align="center">
               <template #default="{ $index }">
-                <el-button type="danger" link size="small" @click="commissionTiers.splice($index, 1)">删除</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" type="danger" link size="small" @click="commissionTiers.splice($index, 1)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
-          <el-button style="margin-top: 12px" size="small" @click="addCommissionTier">+ 添加档位</el-button>
+          <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" style="margin-top: 12px" size="small" @click="addCommissionTier">+ 添加档位</el-button>
 
           <!-- 提成试算 -->
           <el-divider>提成试算</el-divider>
@@ -81,8 +81,8 @@
             <div class="card-header">
               <span>职级考核与津贴标准</span>
               <div>
-                <el-button size="small" @click="resetRule('grade')">恢复默认</el-button>
-                <el-button size="small" type="primary" @click="saveRule('grade')">保存</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_RESET)" size="small" @click="resetRule('grade')">恢复默认</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" size="small" type="primary" @click="saveRule('grade')">保存</el-button>
               </div>
             </div>
           </template>
@@ -122,8 +122,8 @@
             <div class="card-header">
               <span>社保公积金参数</span>
               <div>
-                <el-button size="small" @click="resetRule('social_insurance')">恢复默认</el-button>
-                <el-button size="small" type="primary" @click="saveRule('social_insurance')">保存</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_RESET)" size="small" @click="resetRule('social_insurance')">恢复默认</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" size="small" type="primary" @click="saveRule('social_insurance')">保存</el-button>
               </div>
             </div>
           </template>
@@ -160,8 +160,8 @@
             <div class="card-header">
               <span>采购专利卖出提成</span>
               <div>
-                <el-button size="small" @click="resetRule('purchase_commission')">恢复默认</el-button>
-                <el-button size="small" type="primary" @click="saveRule('purchase_commission')">保存</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_RESET)" size="small" @click="resetRule('purchase_commission')">恢复默认</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" size="small" type="primary" @click="saveRule('purchase_commission')">保存</el-button>
               </div>
             </div>
           </template>
@@ -201,8 +201,8 @@
             <div class="card-header">
               <span>考勤扣款参数（事假/病假按法定）</span>
               <div>
-                <el-button size="small" @click="resetRule('attendance')">恢复默认</el-button>
-                <el-button size="small" type="primary" @click="saveRule('attendance')">保存</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_RESET)" size="small" @click="resetRule('attendance')">恢复默认</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" size="small" type="primary" @click="saveRule('attendance')">保存</el-button>
               </div>
             </div>
           </template>
@@ -242,8 +242,8 @@
             <div class="card-header">
               <span>个税参数（简化版-按月独立计税）</span>
               <div>
-                <el-button size="small" @click="resetRule('income_tax')">恢复默认</el-button>
-                <el-button size="small" type="primary" @click="saveRule('income_tax')">保存</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_RESET)" size="small" @click="resetRule('income_tax')">恢复默认</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" size="small" type="primary" @click="saveRule('income_tax')">保存</el-button>
               </div>
             </div>
           </template>
@@ -286,11 +286,11 @@
             </el-table-column>
             <el-table-column label="操作" width="80" align="center">
               <template #default="{ $index }">
-                <el-button type="danger" link size="small" @click="incomeTaxBrackets.splice($index, 1)">删除</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" type="danger" link size="small" @click="incomeTaxBrackets.splice($index, 1)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
-          <el-button style="margin-top: 12px" size="small" @click="addTaxBracket">+ 添加档位</el-button>
+          <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" style="margin-top: 12px" size="small" @click="addTaxBracket">+ 添加档位</el-button>
         </el-card>
       </el-tab-pane>
 
@@ -301,8 +301,8 @@
             <div class="card-header">
               <span>通用薪资参数</span>
               <div>
-                <el-button size="small" @click="resetRule('general')">恢复默认</el-button>
-                <el-button size="small" type="primary" @click="saveRule('general')">保存</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_RESET)" size="small" @click="resetRule('general')">恢复默认</el-button>
+                <el-button v-if="can(PERMISSIONS.SALARY_RULE_UPDATE)" size="small" type="primary" @click="saveRule('general')">保存</el-button>
               </div>
             </div>
           </template>
@@ -335,6 +335,11 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAllSalaryRules, initSalaryRules, updateSalaryRule, resetSalaryRule } from '@/api/salaryRule'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const loading = ref(false)
 const initLoading = ref(false)

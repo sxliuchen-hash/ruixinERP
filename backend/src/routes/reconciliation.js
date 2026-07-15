@@ -24,7 +24,9 @@ const router = express.Router();
 const multer = require('multer');
 const reconciliationController = require('../controllers/reconciliationController');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 const { operationLog } = require('../middlewares/operationLog');
 
 const upload = multer({
@@ -38,35 +40,47 @@ const upload = multer({
 });
 
 router.use(authenticate);
-router.use(requireErpAccess());
+router.use(requirePermission(PERMISSIONS.APP_VIEW));
 
 // ===== 上传 + 查询 =====
 router.post('/upload',
+  requirePermission(PERMISSIONS.RECONCILIATION_IMPORT),
+  requireFreshPermissionVersion(),
   upload.single('file'),
   operationLog('create', 'bank_statements'),
   reconciliationController.upload
 );
-router.get('/history', reconciliationController.getHistory);
-router.get('/result/:batchNo', reconciliationController.getResult);
+router.get('/history', requirePermission(PERMISSIONS.RECONCILIATION_VIEW), reconciliationController.getHistory);
+router.get('/result/:batchNo', requirePermission(PERMISSIONS.RECONCILIATION_VIEW), reconciliationController.getResult);
 router.delete('/batch/:batchNo',
+  requirePermission(PERMISSIONS.RECONCILIATION_DELETE),
+  requireFreshPermissionVersion(),
   operationLog('delete', 'bank_statements'),
   reconciliationController.deleteBatch
 );
 
 // ===== 单条流水操作 =====
 router.post('/statements/:id/create-payment',
+  requirePermission(PERMISSIONS.RECONCILIATION_MATCH),
+  requireFreshPermissionVersion(),
   operationLog('create', 'payments'),
   reconciliationController.createPaymentFromStatement
 );
 router.put('/statements/:id/match',
+  requirePermission(PERMISSIONS.RECONCILIATION_MATCH),
+  requireFreshPermissionVersion(),
   operationLog('update', 'bank_statements'),
   reconciliationController.manualMatch
 );
 router.put('/statements/:id/unmatch',
+  requirePermission(PERMISSIONS.RECONCILIATION_UNMATCH),
+  requireFreshPermissionVersion(),
   operationLog('update', 'bank_statements'),
   reconciliationController.unmatch
 );
 router.put('/statements/:id/ignore',
+  requirePermission(PERMISSIONS.RECONCILIATION_MATCH),
+  requireFreshPermissionVersion(),
   operationLog('update', 'bank_statements'),
   reconciliationController.ignore
 );

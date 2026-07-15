@@ -1,5 +1,8 @@
 -- ============================================================
 -- 系统设置表（key-value 模式，存储业务参数）
+-- 本文件仅保留为新库结构参考；存量库必须执行：
+-- npm run migrate:system-settings
+-- JS 迁移会在任何变更前检查既有结构并对冲突 fail-closed。
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `system_settings` (
   `id` INT NOT NULL AUTO_INCREMENT,

@@ -7,7 +7,7 @@
       </el-button>
       <h3>合同详情</h3>
       <div class="header-actions">
-        <el-button type="warning" plain size="small" @click="handleConfirm" v-if="contract.confirm_status === 'pending'">
+        <el-button v-if="contract.confirm_status === 'pending' && can(PERMISSIONS.CONTRACT_CONFIRM)" type="warning" plain size="small" @click="handleConfirm">
           确认合同
         </el-button>
       </div>
@@ -73,17 +73,18 @@
         <div class="attachment-area">
           <template v-if="attachmentList.length > 0">
             <div v-for="(file, idx) in attachmentList" :key="idx" class="attachment-item">
-              <el-link type="primary" @click="previewFile(file)">
+              <el-link v-if="can(PERMISSIONS.FILE_DOWNLOAD)" type="primary" @click="previewFile(file)">
                 <el-icon><Document /></el-icon>
                 {{ file.field }}
               </el-link>
               <span class="file-size">{{ formatFileSize(file.size) }}</span>
-              <el-button size="small" link type="info" @click="downloadFileForce(file)">下载</el-button>
-              <el-button size="small" link type="primary" @click="openInNewWindow(file)">新窗口</el-button>
+              <el-button v-if="can(PERMISSIONS.FILE_DOWNLOAD)" size="small" link type="info" @click="downloadFileForce(file)">下载</el-button>
+              <el-button v-if="can(PERMISSIONS.FILE_DOWNLOAD)" size="small" link type="primary" @click="openInNewWindow(file)">新窗口</el-button>
             </div>
           </template>
           <div v-else class="no-attachment">暂无附件</div>
           <el-upload
+            v-if="can(PERMISSIONS.CONTRACT_UPLOAD)"
             :action="uploadUrl"
             :headers="uploadHeaders"
             :on-success="handleUploadSuccess"
@@ -190,8 +191,8 @@
     </div>
     <template #footer>
       <el-button @click="previewVisible = false">关闭</el-button>
-      <el-button type="primary" @click="openInNewWindow(currentPreviewFile)">新窗口打开</el-button>
-      <el-button type="success" @click="downloadFileForce(currentPreviewFile)">下载</el-button>
+      <el-button v-if="can(PERMISSIONS.FILE_DOWNLOAD)" type="primary" @click="openInNewWindow(currentPreviewFile)">新窗口打开</el-button>
+      <el-button v-if="can(PERMISSIONS.FILE_DOWNLOAD)" type="success" @click="downloadFileForce(currentPreviewFile)">下载</el-button>
     </template>
   </el-dialog>
 </template>
@@ -206,10 +207,12 @@ import { formatMoney, formatDate } from '@/utils/format'
 import { CONTRACT_STATUS_MAP, CONFIRM_STATUS_MAP } from '@/utils/constants'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
+import { PERMISSIONS } from '@/constants/permissions'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const loading = ref(false)
 const contract = ref({})
@@ -224,7 +227,7 @@ const attachmentList = computed(() => {
     return Array.isArray(parsed) ? parsed : []
   } catch (e) {
     // 兼容旧格式（单个 URL 字符串）
-    if (contract.value.attachment_url.startsWith('http')) {
+    if (typeof contract.value.attachment_url === 'string' && contract.value.attachment_url) {
       return [{ field: '附件', url: contract.value.attachment_url, size: 0 }]
     }
     return []
@@ -238,24 +241,33 @@ const previewTitle = ref('')
 const currentPreviewFile = ref(null)
 
 function getFileKey(file) {
-  if (!file || !file.url) return ''
-  const match = file.url.match(/myqcloud\.com\/(.+)$/)
-  return match ? match[1] : ''
+  const raw = file?.key || file?.url
+  if (!raw || typeof raw !== 'string') return ''
+
+  let candidate = raw.trim()
+  try {
+    if (/^https?:\/\//i.test(candidate)) candidate = new URL(candidate).pathname
+    candidate = decodeURIComponent(candidate).replace(/^\/+/, '')
+  } catch {
+    return ''
+  }
+
+  return ['erp-files/', 'erp/contracts/', 'uploads/'].some((prefix) => candidate.startsWith(prefix))
+    ? candidate
+    : ''
 }
 
-// 先用 JWT 换取 60s 一次性票据，URL 不再暴露长效 token；票据失败则降级回 token
+// 先用 JWT 换取 60s 一次性票据，URL 不暴露长效 token。
 async function buildFileUrl(key, preview) {
   const previewQ = preview ? '&preview=1' : ''
-  try {
-    const res = await request.post('/files/ticket', { key })
-    const ticket = res?.data?.ticket
-    if (ticket) {
-      return `/api/v1/files/download?ticket=${encodeURIComponent(ticket)}${previewQ}`
-    }
-  } catch (e) {
-    // 降级到 token
-  }
-  return `/api/v1/files/download?key=${encodeURIComponent(key)}&token=${encodeURIComponent(userStore.token)}${previewQ}`
+  const res = await request.post('/files/ticket', {
+    key,
+    resourceType: 'contract',
+    resourceId: Number(route.params.id)
+  })
+  const ticket = res?.data?.ticket
+  if (!ticket) throw new Error('未能获取文件访问票据')
+  return `/api/v1/files/download?ticket=${encodeURIComponent(ticket)}${previewQ}`
 }
 
 async function previewFile(file) {
@@ -263,8 +275,12 @@ async function previewFile(file) {
   if (!key) return
   currentPreviewFile.value = file
   previewTitle.value = file.field || '文件预览'
-  previewUrl.value = await buildFileUrl(key, true)
-  previewVisible.value = true
+  try {
+    previewUrl.value = await buildFileUrl(key, true)
+    previewVisible.value = true
+  } catch (error) {
+    ElMessage.error(error.message || '文件预览失败')
+  }
 }
 
 function openInNewWindow(file) {
@@ -275,6 +291,9 @@ function openInNewWindow(file) {
   buildFileUrl(key, true).then((url) => {
     if (win) win.location.href = url
     else window.open(url, '_blank')
+  }).catch((error) => {
+    if (win) win.close()
+    ElMessage.error(error.message || '文件预览失败')
   })
 }
 
@@ -285,6 +304,9 @@ function downloadFileForce(file) {
   buildFileUrl(key, false).then((url) => {
     if (win) win.location.href = url
     else window.open(url, '_blank')
+  }).catch((error) => {
+    if (win) win.close()
+    ElMessage.error(error.message || '文件下载失败')
   })
 }
 
@@ -363,7 +385,11 @@ function handleUploadSuccess(response) {
   fetchDetail()
 }
 
-function handleUploadError() {
+function handleUploadError(error) {
+  if (Number(error?.status) === 401) {
+    void userStore.expireSession('session_expired')
+    return
+  }
   ElMessage.error('附件上传失败，请重试')
 }
 

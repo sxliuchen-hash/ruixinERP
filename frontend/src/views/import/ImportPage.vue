@@ -10,7 +10,7 @@
     Step 4：确认导入 + 结果展示
 
   业务规则：
-    - 仅 admin 角色可访问（路由守卫 + 后端双重校验）
+    - 页面需 erp.import.view，校验和执行分别使用独立权限
     - 合同/专利库存有重复检测（contract_no / patent_no）
     - 事务批量写入，任一行失败则全部回滚
     - 名称 → ID 自动匹配（客户/供应商/账户/类别）
@@ -87,6 +87,7 @@
       <div class="step-actions">
         <el-button @click="currentStep = 0">上一步</el-button>
         <el-button
+          v-if="can(PERMISSIONS.IMPORT_VALIDATE)"
           type="primary"
           :disabled="!selectedFile"
           :loading="validateLoading"
@@ -162,6 +163,7 @@
       <div class="step-actions">
         <el-button @click="handleReset">重新上传</el-button>
         <el-button
+          v-if="can(PERMISSIONS.IMPORT_EXECUTE)"
           type="primary"
           :disabled="validateResult.validCount === 0"
           :loading="importLoading"
@@ -218,6 +220,11 @@ import { ref } from 'vue'
 import { Download, UploadFilled, WarningFilled, Document, Money, Box, PriceTag } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { downloadTemplate, validateImportFile, executeImport } from '@/api/import'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // ===== 导入类型定义 =====
 const IMPORT_TYPES = [

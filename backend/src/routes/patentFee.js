@@ -4,7 +4,7 @@
  * ============================================================
  * 路由前缀：/api/v1/patent-fee
  *
- * 中间件栈：authenticate → requireErpAccess
+ * 中间件栈：authenticate → erp.app.view → erp.patent_fee.view
  *
  * 资源树：
  *   GET /list                 年费列表（分页、筛选）
@@ -17,10 +17,12 @@ const express = require('express');
 const router = express.Router();
 const patentFeeController = require('../controllers/patentFeeController');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 
 router.use(authenticate);
-router.use(requireErpAccess());
+router.use(requirePermission(PERMISSIONS.APP_VIEW));
+router.use(requirePermission(PERMISSIONS.PATENT_FEE_VIEW));
 
 // 年费列表
 router.get('/list', patentFeeController.getFeeList);

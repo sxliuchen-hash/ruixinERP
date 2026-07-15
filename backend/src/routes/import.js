@@ -9,8 +9,8 @@
  *   POST /import/validate/:type   上传 Excel 预览校验
  *   POST /import/execute/:type    确认导入（事务批量写入）
  *
- * 中间件栈：authenticate → requireErpAccess(admin) → multer → controller
- * 仅 admin 角色可执行数据导入（防止误操作）
+ * 中间件栈：authenticate → requirePermission → multer → controller
+ * 下载、校验、执行分别使用独立权限，默认由主项目权限中心配置。
  * ============================================================
  */
 const express = require('express');
@@ -18,7 +18,9 @@ const router = express.Router();
 const multer = require('multer');
 const importController = require('../controllers/importController');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 const { operationLog } = require('../middlewares/operationLog');
 
 // multer 内存存储，限制 10MB
@@ -40,11 +42,11 @@ const upload = multer({
 });
 
 router.use(authenticate);
-router.use(requireErpAccess('admin'));
 
 // 下载模板（无需 multer）
 router.get(
   '/template/:type',
+  requirePermission(PERMISSIONS.IMPORT_VIEW),
   operationLog('create', 'import_template'),
   importController.downloadTemplate
 );
@@ -52,6 +54,8 @@ router.get(
 // 上传校验
 router.post(
   '/validate/:type',
+  requirePermission(PERMISSIONS.IMPORT_VALIDATE),
+  requireFreshPermissionVersion(),
   upload.single('file'),
   importController.validateFile
 );
@@ -59,6 +63,8 @@ router.post(
 // 确认导入
 router.post(
   '/execute/:type',
+  requirePermission(PERMISSIONS.IMPORT_EXECUTE),
+  requireFreshPermissionVersion(),
   operationLog('create', 'import_execute'),
   importController.executeImport
 );

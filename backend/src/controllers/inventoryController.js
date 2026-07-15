@@ -11,12 +11,17 @@ const inventoryService = require('../services/inventoryService');
 const inventoryBatchService = require('../services/inventoryBatchService');
 const patentAnomalyService = require('../services/patentAnomalyService');
 const { sendExcel } = require('../utils/excelHelper');
+const { getLegacyAuthorizationRole } = require('../permissions/legacyRoleAdapter');
+
+function getLegacyAccessContext(user) {
+  return { userId: user.id, userRole: getLegacyAuthorizationRole(user) };
+}
 
 /** GET /api/v1/inventory */
 async function getList(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const result = await inventoryService.getList(req.query, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const result = await inventoryService.getList(req.query, userId, userRole, req.dataFilter);
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -26,7 +31,11 @@ async function getList(req, res, next) {
 /** GET /api/v1/inventory/overview - 库存总览统计 */
 async function getOverview(req, res, next) {
   try {
-    const data = await inventoryService.getOverview();
+    const data = await inventoryService.getOverview(
+      req.dataFilter,
+      req.user.id,
+      getLegacyAuthorizationRole(req.user)
+    );
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -36,7 +45,12 @@ async function getOverview(req, res, next) {
 /** GET /api/v1/inventory/expiring - 即将到期列表 */
 async function getExpiring(req, res, next) {
   try {
-    const data = await inventoryService.getExpiring(req.query);
+    const data = await inventoryService.getExpiring(
+      req.query,
+      req.dataFilter,
+      req.user.id,
+      getLegacyAuthorizationRole(req.user)
+    );
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -47,8 +61,8 @@ async function getExpiring(req, res, next) {
 async function getDetail(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.getDetail(parseInt(id, 10), userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.getDetail(parseInt(id, 10), userId, userRole, req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -69,8 +83,8 @@ async function create(req, res, next) {
 async function update(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.update(parseInt(id, 10), req.body, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.update(parseInt(id, 10), req.body, userId, userRole, req.dataFilter);
     res.json({ success: true, message: '库存记录更新成功', data });
   } catch (error) {
     next(error);
@@ -81,8 +95,8 @@ async function update(req, res, next) {
 async function remove(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.delete(parseInt(id, 10), userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.delete(parseInt(id, 10), userId, userRole, req.dataFilter);
     res.json({ success: true, message: '库存记录已删除', data });
   } catch (error) {
     next(error);
@@ -93,8 +107,8 @@ async function remove(req, res, next) {
 async function batchDelete(req, res, next) {
   try {
     const { ids } = req.body;
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.batchDelete(ids, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.batchDelete(ids, userId, userRole, req.dataFilter);
     res.json({
       success: true,
       message: `已删除 ${data.deleted} 条记录`,
@@ -110,13 +124,14 @@ async function changeStatus(req, res, next) {
   try {
     const { id } = req.params;
     const { status, stock_out_date } = req.body;
-    const { id: userId, role: userRole } = req.user;
+    const { userId, userRole } = getLegacyAccessContext(req.user);
     const data = await inventoryService.changeStatus(
       parseInt(id, 10),
       status,
       stock_out_date,
       userId,
-      userRole
+      userRole,
+      req.dataFilter
     );
     res.json({ success: true, message: '状态变更成功', data });
   } catch (error) {
@@ -128,8 +143,10 @@ async function changeStatus(req, res, next) {
 async function changePrice(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.changePrice(parseInt(id, 10), req.body, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.changePrice(
+      parseInt(id, 10), req.body, userId, userRole, req.dataFilter
+    );
     res.json({ success: true, message: '调价成功', data });
   } catch (error) {
     next(error);
@@ -139,8 +156,8 @@ async function changePrice(req, res, next) {
 /** PUT /api/v1/inventory/batch-price - 批量调价 */
 async function batchChangePrice(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.batchChangePrice(req.body, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.batchChangePrice(req.body, userId, userRole, req.dataFilter);
     res.json({
       success: true,
       message: `批量调价完成，影响 ${data.affected} 条`,
@@ -155,12 +172,13 @@ async function batchChangePrice(req, res, next) {
 async function addAnnualFee(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
+    const { userId, userRole } = getLegacyAccessContext(req.user);
     const data = await inventoryService.addAnnualFee(
       parseInt(id, 10),
       req.body,
       userId,
-      userRole
+      userRole,
+      req.dataFilter
     );
     res.status(201).json({ success: true, message: '年费记录添加成功', data });
   } catch (error) {
@@ -172,12 +190,13 @@ async function addAnnualFee(req, res, next) {
 async function deleteAnnualFee(req, res, next) {
   try {
     const { id, feeId } = req.params;
-    const { id: userId, role: userRole } = req.user;
+    const { userId, userRole } = getLegacyAccessContext(req.user);
     const data = await inventoryService.deleteAnnualFee(
       parseInt(id, 10),
       parseInt(feeId, 10),
       userId,
-      userRole
+      userRole,
+      req.dataFilter
     );
     res.json({ success: true, message: '年费记录已删除', data });
   } catch (error) {
@@ -189,10 +208,15 @@ async function deleteAnnualFee(req, res, next) {
 async function syncFromIpSystem(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
+    const { userId, userRole } = getLegacyAccessContext(req.user);
 
     // 先获取库存记录拿到 patent_no
-    const inv = await inventoryService.getDetail(parseInt(id, 10), req.user.id, req.user.role);
+    const inv = await inventoryService.getDetail(
+      parseInt(id, 10),
+      req.user.id,
+      getLegacyAuthorizationRole(req.user),
+      req.dataFilter
+    );
 
     // 调用 IP 系统获取最新数据
     const ipSystemService = require('../services/ipSystemService');
@@ -203,7 +227,8 @@ async function syncFromIpSystem(req, res, next) {
       parseInt(id, 10),
       ipData,
       userId,
-      userRole
+      userRole,
+      req.dataFilter
     );
 
     res.json({
@@ -350,8 +375,10 @@ async function getScanProgress(req, res, next) {
 async function markAsSold(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.markAsSold(parseInt(id, 10), req.body, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.markAsSold(
+      parseInt(id, 10), req.body, userId, userRole, req.dataFilter
+    );
     res.json({ success: true, message: '已标记为已售', data });
   } catch (error) {
     next(error);
@@ -362,8 +389,8 @@ async function markAsSold(req, res, next) {
 async function unsell(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.unsell(parseInt(id, 10), userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.unsell(parseInt(id, 10), userId, userRole, req.dataFilter);
     res.json({ success: true, message: '已撤销，恢复为在库', data });
   } catch (error) {
     next(error);
@@ -373,8 +400,8 @@ async function unsell(req, res, next) {
 /** GET /api/v1/inventory/sold - 已售归档列表 */
 async function getSoldList(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const result = await inventoryService.getSoldList(req.query, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const result = await inventoryService.getSoldList(req.query, userId, userRole, req.dataFilter);
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -384,8 +411,8 @@ async function getSoldList(req, res, next) {
 /** GET /api/v1/inventory/sold/stats - 已售统计摘要 */
 async function getSoldStats(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.getSoldStats(userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.getSoldStats(userId, userRole, req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -395,8 +422,10 @@ async function getSoldStats(req, res, next) {
 /** GET /api/v1/inventory/sold/analytics - 已售统计分析（图表） */
 async function getSoldAnalytics(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const data = await inventoryService.getSoldAnalytics(req.query, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await inventoryService.getSoldAnalytics(
+      req.query, userId, userRole, req.dataFilter
+    );
     res.json({ success: true, data });
   } catch (error) {
     next(error);

@@ -1,11 +1,20 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const MainUser = require('../models/MainUser');
 const { UnauthorizedError, ForbiddenError } = require('../utils/errors');
 const logger = require('../utils/logger');
+const {
+  isPasswordLoginEnabled,
+  isLegacySessionEnabled
+} = require('../config/authFeatures');
+const {
+  LEGACY_ERP_ROLES,
+  buildLegacyPermissions
+} = require('../permissions/legacyRoleAdapter');
 
-// 允许登录 ERP 的角色（拒绝 client/sub_account/sub_department）
-const ALLOWED_ROLES = ['admin', 'process', 'agent'];
+function getMainUserModel() {
+  // 主项目模型只允许旧认证路径按需加载，避免全量 SSO 启动时创建主库依赖。
+  return require('../models/MainUser');
+}
 
 class AuthService {
   /**
@@ -16,9 +25,18 @@ class AuthService {
    * @returns {Promise<{token: string, user: object}>}
    */
   async login(username, password) {
+    if (!isPasswordLoginEnabled() || !isLegacySessionEnabled()) {
+      throw new ForbiddenError('ERP 密码登录已关闭，请从主项目进入');
+    }
+
+    const MainUser = getMainUserModel();
     // 使用 MainUser 模型的 withPassword scope 查询（包含 password 字段）
     const user = await MainUser.scope('withPassword').findOne({
-      where: { username }
+      where: { username },
+      attributes: [
+        'id', 'username', 'password', 'role', 'status',
+        'realName', 'email', 'phone', 'departmentName'
+      ]
     });
 
     if (!user) {
@@ -31,7 +49,7 @@ class AuthService {
     }
 
     // 检查角色：只允许 admin/process/agent 登录 ERP
-    if (!ALLOWED_ROLES.includes(user.role)) {
+    if (!LEGACY_ERP_ROLES.includes(user.role)) {
       throw new ForbiddenError('您的角色无权访问 ERP 系统');
     }
 
@@ -57,7 +75,17 @@ class AuthService {
 
     logger.info(`用户 ${username} 登录成功，角色: ${user.role}`);
 
-    return { token, user: userInfo };
+    return {
+      token,
+      user: {
+        ...userInfo,
+        authSource: 'legacy',
+        permissionVersion: 0
+      },
+      permissions: buildLegacyPermissions(user.role),
+      permissionVersion: 0,
+      authSource: 'legacy'
+    };
   }
 
   /**
@@ -67,8 +95,18 @@ class AuthService {
    * @returns {Promise<object>}
    */
   async getProfile(userId) {
+    if (!isLegacySessionEnabled()) {
+      throw new UnauthorizedError('旧版 ERP 会话已失效，请从主项目重新进入');
+    }
+
+    const MainUser = getMainUserModel();
     // 使用默认 scope（排除 password 字段）
-    const user = await MainUser.findByPk(userId);
+    const user = await MainUser.findByPk(userId, {
+      attributes: [
+        'id', 'username', 'realName', 'email', 'phone',
+        'role', 'status', 'departmentName'
+      ]
+    });
 
     if (!user) {
       throw new UnauthorizedError('用户不存在');
@@ -92,8 +130,11 @@ class AuthService {
    * @returns {object} decoded payload
    */
   verifyToken(token) {
+    if (!isLegacySessionEnabled() || !process.env.JWT_SECRET) {
+      throw new UnauthorizedError('旧版 ERP 会话已失效，请从主项目重新进入');
+    }
     try {
-      return jwt.verify(token, process.env.JWT_SECRET);
+      return jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     } catch (error) {
       if (error.name === 'TokenExpiredError') {
         throw new UnauthorizedError('认证令牌已过期，请重新登录');
@@ -109,10 +150,15 @@ class AuthService {
    * @returns {string}
    */
   generateToken(user) {
+    if (!isPasswordLoginEnabled() || !isLegacySessionEnabled() || !process.env.JWT_SECRET) {
+      throw new ForbiddenError('ERP 密码登录已关闭，请从主项目进入');
+    }
+
     const payload = {
       id: user.id,
       username: user.username,
-      role: user.role
+      role: user.role,
+      authSource: 'legacy'
     };
 
     return jwt.sign(payload, process.env.JWT_SECRET, {

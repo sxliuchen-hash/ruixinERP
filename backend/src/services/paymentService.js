@@ -22,9 +22,8 @@
  *   合同 paid_amount 的变更 与 payment 记录的写入 原子一致
  *
  * 【数据隔离】
- * agent 角色只能看到 created_by = 自己 的记录。
- * 路由层已通过 attachDataFilter 中间件附加了 req.dataFilter，
- * 本服务额外在 getList/update/delete 里做了一层兜底判断，双重保险。
+ * 路由层通过 attachPermissionDataScope 生成 created_by 范围过滤。
+ * 服务层只接受该 dataFilter；缺失或非法过滤条件一律按无数据处理。
  *
  * 【后续扩展点】
  *   - 对接企微审批同步后，pending → confirmed 走 confirm() 方法
@@ -57,6 +56,36 @@ function getCostService() {
   return require('./costService');
 }
 
+const DENY_DATA_FILTER = Object.freeze({ created_by: -1 });
+
+function normalizeDataFilter(dataFilter) {
+  if (!dataFilter || typeof dataFilter !== 'object' || Array.isArray(dataFilter)) {
+    return { ...DENY_DATA_FILTER };
+  }
+
+  const keys = Object.keys(dataFilter);
+  if (keys.length === 0) return {};
+  if (keys.length !== 1 || keys[0] !== 'created_by') return { ...DENY_DATA_FILTER };
+
+  const ownerScope = dataFilter.created_by;
+  if (Number.isInteger(Number(ownerScope))) {
+    return { created_by: Number(ownerScope) };
+  }
+
+  const teamIds = ownerScope && typeof ownerScope === 'object'
+    ? ownerScope[Op.in]
+    : null;
+  if (!Array.isArray(teamIds)) return { ...DENY_DATA_FILTER };
+
+  const normalizedIds = [...new Set(teamIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0))];
+
+  return normalizedIds.length > 0
+    ? { created_by: { [Op.in]: normalizedIds } }
+    : { ...DENY_DATA_FILTER };
+}
+
 class PaymentService {
   /**
    * 获取收付款列表（分页 + 多维筛选）
@@ -75,11 +104,10 @@ class PaymentService {
    * @param {string} [query.start_date]       起始日期
    * @param {string} [query.end_date]         截止日期
    * @param {string} [query.keyword]          关键词（summary/remark/sp_no 模糊匹配）
-   * @param {number} userId                   当前用户 ID（用于数据隔离兜底）
-   * @param {string} userRole                 当前用户角色
+   * @param {Object} dataFilter               attachPermissionDataScope 生成的范围
    * @returns {Promise<{list: Array, pagination: Object}>}
    */
-  async getList(query, userId, userRole) {
+  async getList(query, dataFilter) {
     const { page, limit, offset } = parsePagination(query);
     const {
       type, category, account_id, contract_id, customer_id, supplier_id,
@@ -87,14 +115,7 @@ class PaymentService {
       start_date, end_date, keyword
     } = query;
 
-    const where = {};
-
-    // ===== 数据隔离（兜底）=====
-    // 路由层 attachDataFilter 已附加 req.dataFilter，service 层作为兜底
-    // 双层保护避免上层中间件漏挂时越权
-    if (userRole === 'agent') {
-      where.created_by = userId;
-    }
+    const where = normalizeDataFilter(dataFilter);
 
     // ===== 精确匹配字段 =====
     if (type) where.type = type;
@@ -151,13 +172,11 @@ class PaymentService {
    * @returns {Promise<Payment>}
    * @throws {NotFoundError} 记录不存在
    */
-  async getDetail(id, userId, userRole) {
-    const payment = await Payment.findByPk(id);
+  async getDetail(id, dataFilter) {
+    const payment = await Payment.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!payment) {
-      throw new NotFoundError('收付款记录不存在');
-    }
-    // 数据隔离：agent 仅能查看自己创建的记录（详情接口此前缺失，存在越权读）
-    if (userRole === 'agent' && payment.created_by !== userId) {
       throw new NotFoundError('收付款记录不存在');
     }
     return payment;
@@ -248,19 +267,15 @@ class PaymentService {
    *
    * @param {number} id
    * @param {Object} data
-   * @param {number} userId
-   * @param {string} userRole
+   * @param {Object} dataFilter
    * @returns {Promise<Payment>}
    */
-  async update(id, data, userId, userRole) {
-    const payment = await Payment.findByPk(id);
+  async update(id, data, dataFilter) {
+    const payment = await Payment.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!payment) {
       throw new NotFoundError('收付款记录不存在');
-    }
-
-    // 数据隔离兜底
-    if (userRole === 'agent' && payment.created_by !== userId) {
-      throw new ValidationError('无权编辑该收付款');
     }
 
     const oldAmount = parseFloat(payment.amount) || 0;
@@ -306,18 +321,15 @@ class PaymentService {
    * 若原先是 business+confirmed，需事务内冲减合同 paid_amount，否则合同进度会虚高。
    *
    * @param {number} id
-   * @param {number} userId
-   * @param {string} userRole
+   * @param {Object} dataFilter
    * @returns {Promise<{id: number}>}
    */
-  async delete(id, userId, userRole) {
-    const payment = await Payment.findByPk(id);
+  async delete(id, dataFilter) {
+    const payment = await Payment.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!payment) {
       throw new NotFoundError('收付款记录不存在');
-    }
-
-    if (userRole === 'agent' && payment.created_by !== userId) {
-      throw new ValidationError('无权删除该收付款');
     }
 
     const amount = parseFloat(payment.amount) || 0;
@@ -344,10 +356,13 @@ class PaymentService {
    * 若是业务类，确认时事务内把金额加到合同 paid_amount 上。
    *
    * @param {number} id
+   * @param {Object} dataFilter
    * @returns {Promise<Payment>}
    */
-  async confirm(id) {
-    const payment = await Payment.findByPk(id);
+  async confirm(id, dataFilter) {
+    const payment = await Payment.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!payment) {
       throw new NotFoundError('收付款记录不存在');
     }
@@ -385,10 +400,10 @@ class PaymentService {
    * @param {number} [query.customer_id] 可按客户筛选
    * @returns {Promise<{list: Array, summary: Object}>}
    */
-  async getReceivable(query) {
+  async getReceivable(query, dataFilter) {
     const { customer_id } = query;
 
-    const contractWhere = { type: 'sale' };
+    const contractWhere = { type: 'sale', ...normalizeDataFilter(dataFilter) };
     if (customer_id) contractWhere.customer_id = parseInt(customer_id, 10);
 
     const contracts = await Contract.findAll({
@@ -432,10 +447,10 @@ class PaymentService {
    * 应付汇总：采购合同金额 - 已付款
    * 与 getReceivable 对称实现
    */
-  async getPayable(query) {
+  async getPayable(query, dataFilter) {
     const { supplier_id } = query;
 
-    const contractWhere = { type: 'purchase' };
+    const contractWhere = { type: 'purchase', ...normalizeDataFilter(dataFilter) };
     if (supplier_id) contractWhere.supplier_id = parseInt(supplier_id, 10);
 
     const contracts = await Contract.findAll({

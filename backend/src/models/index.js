@@ -13,12 +13,11 @@
  *   - 每条关联关系需同时定义双向（belongsTo + hasMany/hasOne），保证两端都能 include
  *
  * 【跨库约束】
- *   MainUser 来自主项目 patent_notice_system，只读，不与 ERP 模型建立 Sequelize 关联
- *   （Sequelize 跨连接不支持自动关联，需要用 user_id 字段手动 JOIN 或分两次查询）
+ *   全量 SSO 的正常业务模型不得加载主项目数据库连接。MainUser 仅由旧认证服务
+ *   在 legacy 开关开启时按需加载，不在本注册中心导出。
  * ============================================================
  */
 const { sequelize } = require('../config/database');
-const { mainSequelize } = require('../config/mainDatabase');
 
 // ==================== ERP 业务模型 ====================
 // Phase 1: 基础框架
@@ -63,9 +62,6 @@ const PerformanceRecord = require('./PerformanceRecord');
 
 // Phase 5: 系统设置
 const SystemSetting = require('./SystemSetting');
-
-// ==================== 主项目模型（只读） ====================
-const MainUser = require('./MainUser');
 
 // ==================== 关联关系定义 ====================
 
@@ -188,7 +184,6 @@ PerformanceImport.hasMany(PerformanceRecord, { foreignKey: 'batch_id', as: 'reco
 
 module.exports = {
   sequelize,
-  mainSequelize,
   BankAccount,
   AccountTransfer,
   Customer,
@@ -210,7 +205,6 @@ module.exports = {
   BankStatement,
   Employee,
   SystemSetting,
-  MainUser,
   PerformanceImport,
   PerformanceRecord,
 };

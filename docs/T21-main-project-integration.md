@@ -1,74 +1,42 @@
 # T21 主项目侧集成指南
 
-> 本文档说明如何在主项目（patent-notice-system）中添加 ERP 财务系统入口。
+> 状态：已更新到 R7 RP 发起流程。本文只保留当前有效集成入口，旧版 URL JWT、无 state callback 和共享 `JWT_SECRET` 方案已经删除。
 
-## 需要修改的文件
+## 主项目入口
 
-### 1. 主项目 MainLayout.vue（顶栏增加入口按钮）
+主项目应按 `erp.app.view` 控制“ERP 财务”按钮是否可见，不再硬编码 `admin/process/agent`。
 
-在顶栏右侧（用户头像旁边）添加一个"ERP 财务"按钮：
+按钮点击后必须先打开 ERP 固定发起地址：
 
-```vue
-<!-- 仅 admin/process/agent 角色显示 -->
-<el-button
-  v-if="['admin', 'process', 'agent'].includes(userRole)"
-  text
-  type="primary"
-  @click="goToErp"
->
-  <el-icon><DataAnalysis /></el-icon>
-  ERP 财务
-</el-button>
+```text
+https://erp.iptt.top/sso/initiate
 ```
 
-跳转逻辑：
+ERP 生成并绑定当前浏览器的 `state` 后跳转主项目 `/sso/continue?app=erp&state=...`。主项目 authorize 成功后只能回到固定地址：
 
-```javascript
-const ERP_URL = 'https://erp.iptt.top'
-
-function goToErp() {
-  const token = localStorage.getItem('token') || ''
-  const url = `${ERP_URL}?token=${encodeURIComponent(token)}`
-  window.open(url, '_blank')
-}
+```text
+https://erp.iptt.top/sso/callback?code=<one-time-code>&state=<same-state>
 ```
 
-### 2. 环境变量（可选）
+主项目不得把登录 JWT 放入 ERP URL，也不得绕过 `/sso/initiate` 直接生成无 state 的 callback。
 
-如果希望 ERP URL 可配置：
+## ERP 已提供的能力
 
-```env
-# .env.production
-VITE_ERP_URL=https://erp.iptt.top
+- `POST /api/v1/auth/sso/initiate`：生成 RP state、写入 Redis 哈希并绑定 HttpOnly 浏览器 Cookie。
+- `POST /api/v1/auth/sso/exchange`：浏览器把一次性 Code 和同一 state 交给 ERP 后端。
+- `GET /api/v1/internal/permissions/manifest`：主项目权限中心同步 ERP 权限目录。
+- RS256 assertion 验签和 active/previous `kid` 轮换。
+- ERP 独立短会话、`permissionVersion` 失效、`self/team/all` 数据范围。
+- ERP 顶栏返回主项目时只打开主项目地址，不携带 Token。
+
+`SystemSwitch` 不承担进入 ERP 的 SSO；它只负责从 ERP 返回或打开主项目。进入 ERP 必须由主项目应用入口先打开 ERP `/sso/initiate`，再按 R7 state 链路完成授权。
+
+## 正式接口契约
+
+以以下文档为准：
+
+```text
+docs/2026-07-10-主项目统一ERP权限与SSO改造交接文档.md
+docs/2026-07-10-ERP统一权限与SSO改造实施确认清单.md
+backend/src/permissions/erp-permission-manifest.json
 ```
-
-```javascript
-const ERP_URL = import.meta.env.VITE_ERP_URL || 'https://erp.iptt.top'
-```
-
-## ERP 侧已完成的工作
-
-1. **SystemSwitch.vue**：ERP 顶栏已有"官文系统"按钮，点击跳转 `https://iptt.top?token=xxx`
-2. **路由守卫 Token 接收**：`router/index.js` 的 `beforeEach` 已处理 `?token=xxx` 参数：
-   - 从 URL 提取 token → 存入 Pinia store + localStorage
-   - 移除 URL 中的 token 参数（避免暴露）
-   - 自动调用 `fetchProfile()` 获取用户信息
-3. **前端 .env**：`VITE_MAIN_SYSTEM_URL=https://iptt.top`
-
-## SSO 流程
-
-```
-主项目 → 点击"ERP 财务" → window.open(erp.iptt.top?token=xxx)
-                                    ↓
-ERP 路由守卫 → 提取 token → setToken → fetchProfile → 进入系统
-                                    ↓
-ERP → 点击"官文系统" → window.open(iptt.top?token=xxx)
-                                    ↓
-主项目路由守卫 → 提取 token → 进入系统
-```
-
-## 注意事项
-
-- Token 共享前提：两个系统使用相同的 JWT Secret（已在 ERP backend .env 中配置 `JWT_SECRET`）
-- 角色限制：仅 admin/process/agent 可见 ERP 入口（前端控制 + ERP 后端 `requireErpAccess` 中间件双重校验）
-- 安全：token 通过 URL 传递后立即从 URL 中移除，避免浏览器历史记录泄露

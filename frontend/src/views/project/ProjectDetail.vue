@@ -37,10 +37,10 @@
         </h3>
       </div>
       <div class="header-actions" v-if="detail">
-        <el-button type="success" @click="handleRefresh">
+        <el-button v-if="can(PERMISSIONS.PROJECT_REFRESH)" type="success" @click="handleRefresh">
           <el-icon><Refresh /></el-icon>刷新聚合
         </el-button>
-        <el-dropdown trigger="click" @command="handleStatusCommand">
+        <el-dropdown v-if="can(PERMISSIONS.PROJECT_UPDATE)" trigger="click" @command="handleStatusCommand">
           <el-button type="warning">
             变更状态<el-icon><ArrowDown /></el-icon>
           </el-button>
@@ -318,9 +318,13 @@ import {
 import { formatMoney, formatDate } from '@/utils/format'
 import { PROJECT_STATUS_MAP, FEE_TYPE_MAP } from '@/utils/constants'
 import ProfitSankey from './ProfitSankey.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const loading = ref(false)
 const detail = ref(null)

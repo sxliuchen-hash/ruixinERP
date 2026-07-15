@@ -99,6 +99,7 @@
 
             <el-form-item>
               <el-button
+                v-if="can(PERMISSIONS.RECONCILIATION_IMPORT)"
                 type="primary"
                 :loading="uploadLoading"
                 @click="handleUpload"
@@ -190,6 +191,7 @@
                         （{{ s.match_score }}分）
                       </el-tag>
                       <el-button
+                        v-if="can(PERMISSIONS.RECONCILIATION_UNMATCH)"
                         type="danger"
                         link
                         size="small"
@@ -234,10 +236,10 @@
                       </el-tag>
                     </div>
                     <div class="statement-item__actions">
-                      <el-button type="primary" size="small" @click="openCreatePaymentDialog(s)">
+                      <el-button v-if="can(PERMISSIONS.RECONCILIATION_MATCH)" type="primary" size="small" @click="openCreatePaymentDialog(s)">
                         创建付款
                       </el-button>
-                      <el-button type="info" link size="small" @click="handleIgnore(s)">
+                      <el-button v-if="can(PERMISSIONS.RECONCILIATION_MATCH)" type="info" link size="small" @click="handleIgnore(s)">
                         忽略
                       </el-button>
                     </div>
@@ -335,7 +337,7 @@
                 <el-button type="primary" link size="small" @click="openResult(row.batch_no)">
                   查看
                 </el-button>
-                <el-button type="danger" link size="small" @click="handleDeleteBatch(row)">
+                <el-button v-if="can(PERMISSIONS.RECONCILIATION_DELETE)" type="danger" link size="small" @click="handleDeleteBatch(row)">
                   删除
                 </el-button>
               </template>
@@ -428,6 +430,7 @@
       <template #footer>
         <el-button @click="createPaymentDialogVisible = false">取消</el-button>
         <el-button
+          v-if="can(PERMISSIONS.RECONCILIATION_MATCH)"
           type="primary"
           :loading="createPaymentLoading"
           @click="handleCreatePayment"
@@ -457,6 +460,11 @@ import AccountSelect from '@/components/business/AccountSelect.vue'
 import ContractSelect from '@/components/business/ContractSelect.vue'
 import CustomerSelect from '@/components/business/CustomerSelect.vue'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // ===== Tab 状态 =====
 const activeTab = ref('upload')

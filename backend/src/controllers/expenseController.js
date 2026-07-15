@@ -4,7 +4,7 @@
  * ============================================================
  * 职责：薄层转接，调用 expenseService 执行业务。
  *   - 参数校验由 validate 中间件 + Joi schema 处理
- *   - 数据隔离由 attachDataFilter 处理（service 层兜底）
+ *   - 数据隔离由 attachPermissionDataScope 处理（service 层 fail-closed）
  * ============================================================
  */
 
@@ -13,8 +13,7 @@ const expenseService = require('../services/expenseService');
 /** GET /api/v1/expenses */
 async function getList(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const result = await expenseService.getList(req.query, userId, userRole);
+    const result = await expenseService.getList(req.query, req.dataFilter);
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -25,8 +24,7 @@ async function getList(req, res, next) {
 async function getDetail(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await expenseService.getDetail(parseInt(id, 10), userId, userRole);
+    const data = await expenseService.getDetail(parseInt(id, 10), req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -51,8 +49,7 @@ async function create(req, res, next) {
 async function update(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await expenseService.update(parseInt(id, 10), req.body, userId, userRole);
+    const data = await expenseService.update(parseInt(id, 10), req.body, req.dataFilter);
     res.json({ success: true, message: '报销单更新成功', data });
   } catch (error) {
     next(error);
@@ -63,8 +60,7 @@ async function update(req, res, next) {
 async function remove(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await expenseService.delete(parseInt(id, 10), userId, userRole);
+    const data = await expenseService.delete(parseInt(id, 10), req.dataFilter);
     res.json({ success: true, message: '报销单已删除', data });
   } catch (error) {
     next(error);
@@ -75,7 +71,7 @@ async function remove(req, res, next) {
 async function confirm(req, res, next) {
   try {
     const { id } = req.params;
-    const data = await expenseService.confirm(parseInt(id, 10));
+    const data = await expenseService.confirm(parseInt(id, 10), req.dataFilter);
     res.json({ success: true, message: '报销单已确认', data });
   } catch (error) {
     next(error);
@@ -85,7 +81,7 @@ async function confirm(req, res, next) {
 /** GET /api/v1/expenses/summary/category - 按类别汇总 */
 async function getCategorySummary(req, res, next) {
   try {
-    const data = await expenseService.getCategorySummary(req.query);
+    const data = await expenseService.getCategorySummary(req.query, req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -95,7 +91,7 @@ async function getCategorySummary(req, res, next) {
 /** GET /api/v1/expenses/summary/user - 按人员汇总 */
 async function getUserSummary(req, res, next) {
   try {
-    const data = await expenseService.getUserSummary(req.query);
+    const data = await expenseService.getUserSummary(req.query, req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -105,7 +101,7 @@ async function getUserSummary(req, res, next) {
 /** GET /api/v1/expenses/summary/monthly - 按月度汇总（趋势） */
 async function getMonthlySummary(req, res, next) {
   try {
-    const data = await expenseService.getMonthlySummary(req.query);
+    const data = await expenseService.getMonthlySummary(req.query, req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);

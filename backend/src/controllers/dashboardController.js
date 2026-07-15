@@ -5,11 +5,11 @@
  * 职责：Dashboard 聚合数据的 HTTP 入口层，薄壳转发到 dashboardService。
  *
  * 路由前缀：/api/v1/dashboard
- * 权限：authenticate + requireErpAccess（admin/process/agent 均可访问）
+ * 权限：由路由层校验 erp.app.view + erp.dashboard.view
  *
  * 后续优化：
  *   - 可加 Redis 缓存，key 规则 `erp:dashboard:<method>:<period>`，TTL 300s
- *   - agent 角色查看的 Dashboard 可做数据隔离版本（只看自己负责的合同/payments）
+ *   - 如后续为 Dashboard 增加 self/team scope，需在 service 查询层实现真实行级过滤
  * ============================================================
  */
 

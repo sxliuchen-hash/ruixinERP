@@ -3,7 +3,7 @@
   企微配置状态页（WechatBindings）
   ============================================================
   展示企微集成配置状态 + 手动触发同步 + 用户 userid 查询
-  仅 admin 可见
+  页面需 erp.wechat.view，配置和同步使用独立权限
   ============================================================
 -->
 <template>
@@ -44,13 +44,13 @@
     <el-card shadow="never" style="margin-bottom: 20px">
       <template #header>操作</template>
       <el-space wrap>
-        <el-button type="primary" :loading="tokenLoading" @click="testToken">
+        <el-button v-if="can(PERMISSIONS.WECHAT_CONFIGURE)" type="primary" :loading="tokenLoading" @click="testToken">
           测试 access_token
         </el-button>
-        <el-button type="success" :loading="syncLoading" @click="manualSync">
+        <el-button v-if="can(PERMISSIONS.WECHAT_SYNC)" type="success" :loading="syncLoading" @click="manualSync">
           手动同步审批（最近2小时）
         </el-button>
-        <el-button type="warning" :loading="syncAllLoading" @click="manualSyncAll">
+        <el-button v-if="can(PERMISSIONS.WECHAT_SYNC)" type="warning" :loading="syncAllLoading" @click="manualSyncAll">
           同步最近24小时
         </el-button>
       </el-space>
@@ -66,7 +66,7 @@
           <el-input v-model="queryUserId" placeholder="如 LiuChen" style="width: 200px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="userLoading" @click="queryUser">查询</el-button>
+          <el-button v-if="can(PERMISSIONS.WECHAT_CONFIGURE)" type="primary" :loading="userLoading" @click="queryUser">查询</el-button>
         </el-form-item>
       </el-form>
       <el-descriptions v-if="userInfo" :column="2" border size="small" style="margin-top: 12px">
@@ -87,6 +87,11 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/api/request'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const config = ref(null)
 const tokenLoading = ref(false)

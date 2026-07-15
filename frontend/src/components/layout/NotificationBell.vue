@@ -14,14 +14,14 @@
   ============================================================
 -->
 <template>
-  <div class="notification-bell">
+  <div v-if="can(PERMISSIONS.NOTIFICATION_VIEW)" class="notification-bell">
     <el-badge
       :value="unreadCount"
       :hidden="!unreadCount"
       :max="99"
       class="bell-badge"
     >
-      <el-button link @click="openDrawer">
+      <el-button link aria-label="打开消息中心" title="消息中心" @click="openDrawer">
         <el-icon :size="20"><Bell /></el-icon>
       </el-button>
     </el-badge>
@@ -56,6 +56,7 @@
         <div class="toolbar-actions">
           <el-checkbox v-model="onlyUnread" @change="fetchList">仅未读</el-checkbox>
           <el-button
+            v-if="can(PERMISSIONS.NOTIFICATION_UPDATE)"
             size="small"
             type="primary"
             :disabled="!unreadCount"
@@ -81,6 +82,7 @@
             <el-tag size="small" type="info">{{ TYPE_MAP[item.type]?.label || item.type }}</el-tag>
             <span class="msg-item__time">{{ formatRelative(item.create_time) }}</span>
             <el-button
+              v-if="can(PERMISSIONS.NOTIFICATION_DELETE) && !item.readonly"
               type="danger"
               link
               size="small"
@@ -119,8 +121,12 @@ import {
   markAllNotificationsRead,
   deleteNotification
 } from '@/api/notification'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 
 const router = useRouter()
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // 轮询间隔（毫秒）
 const POLL_INTERVAL = 60 * 1000
@@ -193,7 +199,7 @@ function openDrawer() {
 
 async function handleMsgClick(item) {
   // 先标记已读（若未读）
-  if (!item.is_read) {
+  if (!item.readonly && !item.is_read && can(PERMISSIONS.NOTIFICATION_UPDATE)) {
     try {
       await markNotificationRead(item.id)
       item.is_read = 1
@@ -242,6 +248,7 @@ function formatRelative(time) {
 // ===== 生命周期 =====
 
 onMounted(() => {
+  if (!can(PERMISSIONS.NOTIFICATION_VIEW)) return
   fetchUnreadCount()
   // 轮询
   pollingTimer = setInterval(fetchUnreadCount, POLL_INTERVAL)

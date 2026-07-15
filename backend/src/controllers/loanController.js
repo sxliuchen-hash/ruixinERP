@@ -12,8 +12,7 @@ const loanService = require('../services/loanService');
 /** GET /api/v1/loans */
 async function getList(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const result = await loanService.getList(req.query, userId, userRole);
+    const result = await loanService.getList(req.query, req.dataFilter);
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -24,8 +23,7 @@ async function getList(req, res, next) {
 async function getDetail(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await loanService.getDetail(parseInt(id, 10), userId, userRole);
+    const data = await loanService.getDetail(parseInt(id, 10), req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -46,8 +44,7 @@ async function create(req, res, next) {
 async function update(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await loanService.update(parseInt(id, 10), req.body, userId, userRole);
+    const data = await loanService.update(parseInt(id, 10), req.body, req.dataFilter);
     res.json({ success: true, message: '借款单更新成功', data });
   } catch (error) {
     next(error);
@@ -58,8 +55,7 @@ async function update(req, res, next) {
 async function remove(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await loanService.delete(parseInt(id, 10), userId, userRole);
+    const data = await loanService.delete(parseInt(id, 10), req.dataFilter);
     res.json({ success: true, message: '借款单已删除', data });
   } catch (error) {
     next(error);
@@ -70,8 +66,12 @@ async function remove(req, res, next) {
 async function addRepayment(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await loanService.addRepayment(parseInt(id, 10), req.body, userId, userRole);
+    const data = await loanService.addRepayment(
+      parseInt(id, 10),
+      req.body,
+      req.user.id,
+      req.dataFilter
+    );
     res.status(201).json({ success: true, message: '还款记录添加成功', data });
   } catch (error) {
     next(error);
@@ -82,12 +82,10 @@ async function addRepayment(req, res, next) {
 async function deleteRepayment(req, res, next) {
   try {
     const { id, repaymentId } = req.params;
-    const { id: userId, role: userRole } = req.user;
     const data = await loanService.deleteRepayment(
       parseInt(id, 10),
       parseInt(repaymentId, 10),
-      userId,
-      userRole
+      req.dataFilter
     );
     res.json({ success: true, message: '还款记录已删除', data });
   } catch (error) {
@@ -98,7 +96,7 @@ async function deleteRepayment(req, res, next) {
 /** GET /api/v1/loans/summary - 借款概况（分状态汇总） */
 async function getSummary(req, res, next) {
   try {
-    const data = await loanService.getSummary(req.query);
+    const data = await loanService.getSummary(req.query, req.dataFilter);
     res.json({ success: true, data });
   } catch (error) {
     next(error);

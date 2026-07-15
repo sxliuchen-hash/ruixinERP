@@ -14,12 +14,32 @@
  */
 const cron = require('node-cron');
 const logger = require('../utils/logger');
+let scheduledTasks = [];
+
+function schedule(expression, handler) {
+  const task = cron.schedule(expression, handler);
+  scheduledTasks.push(task);
+  return task;
+}
+
+function stopJobs() {
+  for (const task of scheduledTasks) {
+    try {
+      if (typeof task.stop === 'function') task.stop();
+      if (typeof task.destroy === 'function') task.destroy();
+    } catch (_error) {
+      // 关闭阶段尽力释放，不因单个任务异常阻断其他资源清理。
+    }
+  }
+  scheduledTasks = [];
+}
 
 const initJobs = () => {
+  stopJobs();
   logger.info('定时任务初始化...');
 
   // 1. 企微审批同步（每 10 分钟）
-  cron.schedule('*/10 * * * *', () => {
+  schedule('*/10 * * * *', () => {
     require('./wechatSyncJob').run().catch(e => {
       logger.error('wechatSyncJob 执行失败:', e);
     });
@@ -27,7 +47,7 @@ const initJobs = () => {
   logger.info('已注册：企微审批同步（每 10 分钟）');
 
   // 2. 附件自动同步到 COS（每小时 30 分）
-  cron.schedule('30 * * * *', () => {
+  schedule('30 * * * *', () => {
     require('./fileSyncJob').run().catch(e => {
       logger.error('fileSyncJob 执行失败:', e);
     });
@@ -35,7 +55,7 @@ const initJobs = () => {
   logger.info('已注册：附件自动同步（每小时 30 分）');
 
   // 3. 专利年费到期提醒（每日 09:00）
-  cron.schedule('0 9 * * *', () => {
+  schedule('0 9 * * *', () => {
     require('./feeReminderJob').run().catch(e => {
       logger.error('feeReminderJob 执行失败:', e);
     });
@@ -43,7 +63,7 @@ const initJobs = () => {
   logger.info('已注册：专利年费到期提醒（每日 09:00）');
 
   // 4. 合同到期提醒（每日 09:00）
-  cron.schedule('0 9 * * *', () => {
+  schedule('0 9 * * *', () => {
     require('./contractReminderJob').run().catch(e => {
       logger.error('contractReminderJob 执行失败:', e);
     });
@@ -51,7 +71,7 @@ const initJobs = () => {
   logger.info('已注册：合同到期提醒（每日 09:00）');
 
   // 5. 固定月费自动生成（每月 1 日 00:05）
-  cron.schedule('5 0 1 * *', () => {
+  schedule('5 0 1 * *', () => {
     require('./recurringCostJob').run().catch(e => {
       logger.error('recurringCostJob 执行失败:', e);
     });
@@ -59,7 +79,7 @@ const initJobs = () => {
   logger.info('已注册：固定月费自动生成（每月 1 日 00:05）');
 
   // 6. 在库专利全量信息扫描（每周日 06:00）
-  cron.schedule('0 6 * * 0', () => {
+  schedule('0 6 * * 0', () => {
     require('./patentBatchQueryJob').run().catch(e => {
       logger.error('patentBatchQueryJob 执行失败:', e);
     });
@@ -67,7 +87,7 @@ const initJobs = () => {
   logger.info('已注册：在库专利全量信息扫描（每周日 06:00）');
 
   // 7. 冗余字段对账校验（每日 02:30）
-  cron.schedule('30 2 * * *', () => {
+  schedule('30 2 * * *', () => {
     require('./reconcileAggregatesJob').run().catch(e => {
       logger.error('reconcileAggregatesJob 执行失败:', e);
     });
@@ -75,6 +95,7 @@ const initJobs = () => {
   logger.info('已注册：冗余字段对账校验（每日 02:30）');
 
   logger.info('定时任务初始化完成');
+  return [...scheduledTasks];
 };
 
-module.exports = { initJobs };
+module.exports = { initJobs, stopJobs };

@@ -4,8 +4,8 @@
  * ============================================================
  * 路由前缀：/api/v1/costs
  *
- * 中间件栈：authenticate → requireErpAccess → validate → operationLog
- * 注意：成本管理目前不做 agent 数据隔离（成本是公司级数据）
+ * 中间件栈：authenticate → erp.app.view → 业务权限码 → validate → operationLog
+ * 注意：成本管理是公司级数据，Manifest 仅声明 all scope。
  *
  * 资源树：
  *   GET    /categories                     类别列表（平铺）
@@ -31,7 +31,9 @@ const express = require('express');
 const router = express.Router();
 const costController = require('../controllers/costController');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess, requireAdmin } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 const { operationLog } = require('../middlewares/operationLog');
 const validate = require('../middlewares/validate');
 const {
@@ -48,53 +50,61 @@ const {
 } = require('../validators/cost');
 
 router.use(authenticate);
-router.use(requireErpAccess());
+router.use(requirePermission(PERMISSIONS.APP_VIEW));
 
 // ===== 成本类别 =====
-router.get('/categories/tree', costController.getCategoryTree);
+router.get('/categories/tree', requirePermission(PERMISSIONS.COST_VIEW), costController.getCategoryTree);
 router.get('/categories',
+  requirePermission(PERMISSIONS.COST_VIEW),
   validate(listCategoryQuerySchema, 'query'),
   costController.getCategoryList
 );
 router.post('/categories',
-  requireAdmin(),
+  requirePermission(PERMISSIONS.COST_CREATE),
   validate(createCategorySchema),
   operationLog('create', 'cost_categories'),
   costController.createCategory
 );
 router.put('/categories/:id',
-  requireAdmin(),
+  requirePermission(PERMISSIONS.COST_UPDATE),
+  requireFreshPermissionVersion(),
   validate(updateCategorySchema),
   operationLog('update', 'cost_categories'),
   costController.updateCategory
 );
 router.delete('/categories/:id',
-  requireAdmin(),
+  requirePermission(PERMISSIONS.COST_DELETE),
+  requireFreshPermissionVersion(),
   operationLog('delete', 'cost_categories'),
   costController.deleteCategory
 );
 
 // ===== 汇总分析（放在 /records 之前，避免被误匹配） =====
 router.get('/summary/monthly',
+  requirePermission(PERMISSIONS.COST_VIEW),
   validate(monthlySummaryQuerySchema, 'query'),
   costController.getMonthlySummary
 );
 router.get('/summary/type',
+  requirePermission(PERMISSIONS.COST_VIEW),
   validate(breakdownQuerySchema, 'query'),
   costController.getTypeBreakdown
 );
 router.get('/summary/category',
+  requirePermission(PERMISSIONS.COST_VIEW),
   validate(breakdownQuerySchema, 'query'),
   costController.getCategoryBreakdown
 );
 router.get('/summary/yoy-mom',
+  requirePermission(PERMISSIONS.COST_VIEW),
   validate(yoyMomQuerySchema, 'query'),
   costController.getYoyMom
 );
 
 // ===== 固定月费生成（管理员手动触发） =====
 router.post('/recurring/generate',
-  requireAdmin(),
+  requirePermission(PERMISSIONS.COST_GENERATE),
+  requireFreshPermissionVersion(),
   validate(generateRecurringSchema),
   operationLog('create', 'cost_records'),
   costController.generateRecurring
@@ -102,20 +112,26 @@ router.post('/recurring/generate',
 
 // ===== 成本记录 =====
 router.get('/records',
+  requirePermission(PERMISSIONS.COST_VIEW),
   validate(listRecordQuerySchema, 'query'),
   costController.getRecordList
 );
 router.post('/records',
+  requirePermission(PERMISSIONS.COST_CREATE),
   validate(createRecordSchema),
   operationLog('create', 'cost_records'),
   costController.createRecord
 );
 router.put('/records/:id',
+  requirePermission(PERMISSIONS.COST_UPDATE),
+  requireFreshPermissionVersion(),
   validate(updateRecordSchema),
   operationLog('update', 'cost_records'),
   costController.updateRecord
 );
 router.delete('/records/:id',
+  requirePermission(PERMISSIONS.COST_DELETE),
+  requireFreshPermissionVersion(),
   operationLog('delete', 'cost_records'),
   costController.deleteRecord
 );

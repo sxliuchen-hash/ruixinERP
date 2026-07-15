@@ -3,23 +3,25 @@
  * 员工档案路由
  * ============================================================
  * 路由前缀：/api/v1/employees
- * 仅 admin 可操作 CRUD
+ * 由员工档案细粒度权限控制 CRUD 和状态变更
  * ============================================================
  */
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middlewares/auth');
-const { requireAdmin } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 const { NotFoundError } = require('../utils/errors');
 const validate = require('../middlewares/validate');
 const { createEmployeeSchema, updateEmployeeSchema } = require('../validators/employee');
 const Employee = require('../models/Employee');
+const employeeService = require('../services/employeeService');
 
 router.use(authenticate);
-router.use(requireAdmin());
 
 // GET /employees - 员工列表
-router.get('/', async (req, res, next) => {
+router.get('/', requirePermission(PERMISSIONS.EMPLOYEE_VIEW), async (req, res, next) => {
   try {
     const { status, role } = req.query;
     const where = {};
@@ -35,7 +37,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /employees/:id - 员工详情
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', requirePermission(PERMISSIONS.EMPLOYEE_VIEW), async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
     if (!employee) throw new NotFoundError('员工不存在');
@@ -44,25 +46,25 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST /employees - 新建员工
-router.post('/', validate(createEmployeeSchema), async (req, res, next) => {
+router.post('/', requirePermission(PERMISSIONS.EMPLOYEE_CREATE), requireFreshPermissionVersion(), validate(createEmployeeSchema), async (req, res, next) => {
   try {
-    const employee = await Employee.create(req.body);
+    const employee = await employeeService.create(req.body);
     res.json({ success: true, data: employee, message: '创建成功' });
   } catch (e) { next(e); }
 });
 
 // PUT /employees/:id - 更新员工
-router.put('/:id', validate(updateEmployeeSchema), async (req, res, next) => {
+router.put('/:id', requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), requireFreshPermissionVersion(), validate(updateEmployeeSchema), async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
     if (!employee) throw new NotFoundError('员工不存在');
-    await employee.update(req.body);
+    await employeeService.update(employee, req.body);
     res.json({ success: true, data: employee, message: '更新成功' });
   } catch (e) { next(e); }
 });
 
 // DELETE /employees/:id - 删除员工
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requirePermission(PERMISSIONS.EMPLOYEE_DELETE), requireFreshPermissionVersion(), async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
     if (!employee) throw new NotFoundError('员工不存在');
@@ -72,7 +74,7 @@ router.delete('/:id', async (req, res, next) => {
 });
 
 // PUT /employees/:id/grade - 变更职级
-router.put('/:id/grade', async (req, res, next) => {
+router.put('/:id/grade', requirePermission(PERMISSIONS.EMPLOYEE_CHANGE_STATUS), requireFreshPermissionVersion(), async (req, res, next) => {
   try {
     const { grade } = req.body;
     const employee = await Employee.findByPk(req.params.id);
@@ -83,7 +85,7 @@ router.put('/:id/grade', async (req, res, next) => {
 });
 
 // PUT /employees/:id/status - 变更状态（转正/离职）
-router.put('/:id/status', async (req, res, next) => {
+router.put('/:id/status', requirePermission(PERMISSIONS.EMPLOYEE_CHANGE_STATUS), requireFreshPermissionVersion(), async (req, res, next) => {
   try {
     const { status, regular_date, resign_date } = req.body;
     const employee = await Employee.findByPk(req.params.id);

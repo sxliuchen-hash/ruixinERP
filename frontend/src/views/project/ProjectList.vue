@@ -62,9 +62,10 @@
         <ExportButton
           path="/export/projects"
           :params="exportParams"
+          :permission="PERMISSIONS.PROJECT_EXPORT"
           label="导出"
         />
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.PROJECT_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建项目
         </el-button>
       </div>
@@ -177,9 +178,9 @@
       <el-table-column label="操作" width="260" align="center" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="success" link size="small" @click="handleRefresh(row)">刷新</el-button>
-          <el-dropdown trigger="click" @command="cmd => handleStatusCommand(row, cmd)">
+          <el-button v-if="can(PERMISSIONS.PROJECT_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.PROJECT_REFRESH)" type="success" link size="small" @click="handleRefresh(row)">刷新</el-button>
+          <el-dropdown v-if="can(PERMISSIONS.PROJECT_UPDATE)" trigger="click" @command="cmd => handleStatusCommand(row, cmd)">
             <el-button type="warning" link size="small">
               状态<el-icon><ArrowDown /></el-icon>
             </el-button>
@@ -197,7 +198,7 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.PROJECT_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -296,8 +297,12 @@ import { PROJECT_STATUS_MAP } from '@/utils/constants'
 import CustomerSelect from '@/components/business/CustomerSelect.vue'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 
 const router = useRouter()
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // ===== 列表状态 =====
 const loading = ref(false)

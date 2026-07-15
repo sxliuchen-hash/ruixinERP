@@ -1,5 +1,13 @@
 const authService = require('../services/authService');
-const { ValidationError } = require('../utils/errors');
+const { ValidationError, ForbiddenError } = require('../utils/errors');
+const { isPasswordLoginEnabled, getAuthFeatures } = require('../config/authFeatures');
+
+function features(req, res) {
+  res.json({
+    success: true,
+    data: getAuthFeatures()
+  });
+}
 
 /**
  * 用户登录
@@ -8,6 +16,10 @@ const { ValidationError } = require('../utils/errors');
  */
 async function login(req, res, next) {
   try {
+    if (!isPasswordLoginEnabled()) {
+      throw new ForbiddenError('ERP 密码登录已关闭，请从主项目进入');
+    }
+
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -56,11 +68,26 @@ async function logout(req, res) {
 async function getProfile(req, res, next) {
   try {
     const userId = req.user.id;
-    const profile = await authService.getProfile(userId);
+    const profile = req.user.authSource === 'main_sso'
+      ? {
+          id: req.user.id,
+          username: req.user.username,
+          realName: req.user.realName,
+          email: req.user.email,
+          phone: req.user.phone,
+          role: req.user.role,
+          departmentName: req.user.departmentName
+        }
+      : await authService.getProfile(userId);
 
     res.json({
       success: true,
-      data: profile
+      data: {
+        ...profile,
+        permissions: req.user.permissions,
+        permissionVersion: req.user.permissionVersion,
+        authSource: req.user.authSource
+      }
     });
   } catch (error) {
     next(error);
@@ -68,6 +95,7 @@ async function getProfile(req, res, next) {
 }
 
 module.exports = {
+  features,
   login,
   logout,
   getProfile

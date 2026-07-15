@@ -18,13 +18,20 @@
           <el-option label="已发放" value="paid" />
           <el-option label="已作废" value="voided" />
         </el-select>
-        <el-button type="primary" @click="handleGenerate" :loading="generating">
+        <ExportButton
+          path="/export/payroll"
+          :params="exportParams"
+          :permission="PERMISSIONS.PAYROLL_EXPORT"
+          label="导出工资条"
+          confirm
+        />
+        <el-button v-if="can(PERMISSIONS.PAYROLL_GENERATE)" type="primary" @click="handleGenerate" :loading="generating">
           生成本月工资条
         </el-button>
-        <el-button type="success" @click="handleConfirmAll" :disabled="summary.draft_count === 0">
+        <el-button v-if="can(PERMISSIONS.PAYROLL_CONFIRM)" type="success" @click="handleConfirmAll" :disabled="summary.draft_count === 0">
           批量确认
         </el-button>
-        <el-button @click="openAdjustment">新增调整项</el-button>
+        <el-button v-if="can(PERMISSIONS.PAYROLL_UPDATE)" @click="openAdjustment">新增调整项</el-button>
       </div>
     </div>
 
@@ -127,16 +134,16 @@
       <el-table-column label="操作" width="180" align="center" fixed="right">
         <template #default="{ row }">
           <template v-if="row.status === 'draft'">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="success" link size="small" @click="handleConfirm(row)">确认</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="can(PERMISSIONS.PAYROLL_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button v-if="can(PERMISSIONS.PAYROLL_CONFIRM)" type="success" link size="small" @click="handleConfirm(row)">确认</el-button>
+            <el-button v-if="can(PERMISSIONS.PAYROLL_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
           </template>
           <template v-else-if="row.status === 'confirmed'">
-            <el-button type="warning" link size="small" @click="handlePaid(row)">发放</el-button>
-            <el-button type="danger" link size="small" @click="handleVoid(row)">作废</el-button>
+            <el-button v-if="can(PERMISSIONS.PAYROLL_PAY)" type="warning" link size="small" @click="handlePaid(row)">发放</el-button>
+            <el-button v-if="can(PERMISSIONS.PAYROLL_VOID)" type="danger" link size="small" @click="handleVoid(row)">作废</el-button>
           </template>
           <template v-else-if="row.status === 'paid'">
-            <el-button type="danger" link size="small" @click="handleVoid(row)">作废</el-button>
+            <el-button v-if="can(PERMISSIONS.PAYROLL_VOID)" type="danger" link size="small" @click="handleVoid(row)">作废</el-button>
           </template>
           <template v-else>
             <span class="paid-label">已作废</span>
@@ -213,7 +220,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   generatePayroll, getPayrollSummary, updatePayroll,
@@ -221,6 +228,12 @@ import {
   voidPayroll, addPayrollAdjustment
 } from '@/api/payroll'
 import { getEmployeeList } from '@/api/employee'
+import ExportButton from '@/components/common/ExportButton.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const ROLE_LABEL = { boss: '老板', partner: '合伙人', sales: '销售', purchase: '采购', admin: '内勤' }
 const ROLE_TYPE = { boss: 'danger', partner: 'warning', sales: 'success', purchase: '', admin: 'info' }
@@ -232,6 +245,14 @@ const selectedMonth = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).pad
 const filterStatus = ref('')
 const loading = ref(false)
 const generating = ref(false)
+const exportParams = computed(() => {
+  const { year, month } = getYearMonth()
+  return {
+    year,
+    month,
+    status: filterStatus.value || undefined
+  }
+})
 
 const payrollList = ref([])
 const summary = ref({ total_count: 0, draft_count: 0, confirmed_count: 0, paid_count: 0, total_gross: 0, total_deduction: 0, total_net: 0 })

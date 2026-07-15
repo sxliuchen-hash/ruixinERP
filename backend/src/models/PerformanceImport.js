@@ -55,6 +55,11 @@ const PerformanceImport = sequelize.define('PerformanceImport', {
     defaultValue: 'draft',
     comment: '状态：草稿/已确认'
   },
+  confirmed_period_key: {
+    type: DataTypes.STRING(16),
+    allowNull: true,
+    comment: '数据库生成：仅 confirmed 状态写入 year-month，用于并发唯一约束'
+  },
   uploaded_by: {
     type: DataTypes.INTEGER,
     comment: '上传人（主项目 users.id）'
@@ -78,7 +83,12 @@ const PerformanceImport = sequelize.define('PerformanceImport', {
   updatedAt: 'update_time',
   indexes: [
     { fields: ['year', 'month'] },
-    { fields: ['status'] }
+    { fields: ['status'] },
+    {
+      name: 'uk_performance_imports_confirmed_period',
+      unique: true,
+      fields: ['confirmed_period_key']
+    }
   ]
 });
 

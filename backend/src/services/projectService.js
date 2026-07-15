@@ -38,12 +38,20 @@ const Payment = require('../models/Payment');
 const Customer = require('../models/Customer');
 const Supplier = require('../models/Supplier');
 const PatentInventory = require('../models/PatentInventory');
-const PatentAnnualFee = require('../models/PatentAnnualFee');
 const BankAccount = require('../models/BankAccount');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 const { parsePagination } = require('../utils/pagination');
 
 class ProjectService {
+  _resolveScopeFilter(userId, userRole, dataFilter) {
+    if (dataFilter && typeof dataFilter === 'object') return dataFilter;
+    if (userRole === 'agent') {
+      return { [Op.or]: [{ created_by: userId }, { owner_id: userId }] };
+    }
+    if (userRole === 'admin' || userRole === 'process' || userRole === undefined) return {};
+    return { id: -1 };
+  }
+
   /**
    * 获取项目列表
    *
@@ -55,19 +63,11 @@ class ProjectService {
    * @param {string} [query.sort]      profit | sale | create（默认 create）
    * @param {string} [query.order]     asc/desc（默认 desc）
    */
-  async getList(query, userId, userRole) {
+  async getList(query, userId, userRole, dataFilter) {
     const { page, limit, offset } = parsePagination(query);
     const { status, customer_id, supplier_id, keyword, sort, order } = query;
 
-    const where = {};
-
-    // ===== 数据隔离：agent 只看 created_by=自己 OR owner_id=自己 =====
-    if (userRole === 'agent') {
-      where[Op.or] = [
-        { created_by: userId },
-        { owner_id: userId }
-      ];
-    }
+    const where = { ...this._resolveScopeFilter(userId, userRole, dataFilter) };
 
     if (status) where.status = status;
     if (customer_id) where.customer_id = parseInt(customer_id, 10);
@@ -122,8 +122,9 @@ class ProjectService {
   /**
    * 获取项目详情（含关联合同/收付款/库存）
    */
-  async getDetail(id, userId, userRole) {
-    const project = await Project.findByPk(id, {
+  async getDetail(id, userId, userRole, dataFilter) {
+    const project = await Project.findOne({
+      where: { id, ...this._resolveScopeFilter(userId, userRole, dataFilter) },
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name'] },
         { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
@@ -164,10 +165,6 @@ class ProjectService {
     });
 
     if (!project) throw new NotFoundError('项目不存在');
-    // 数据隔离：agent 仅能查看自己创建或负责的项目
-    if (userRole === 'agent' && project.created_by !== userId && project.owner_id !== userId) {
-      throw new NotFoundError('项目不存在');
-    }
     return project;
   }
 
@@ -201,11 +198,11 @@ class ProjectService {
   /**
    * 更新项目基本信息（不接受聚合字段）
    */
-  async update(id, data, userId, userRole) {
-    const project = await Project.findByPk(id);
+  async update(id, data, userId, userRole, dataFilter) {
+    const project = await Project.findOne({
+      where: { id, ...this._resolveScopeFilter(userId, userRole, dataFilter) }
+    });
     if (!project) throw new NotFoundError('项目不存在');
-
-    this._ensureWritable(project, userId, userRole);
 
     // 剥离系统管控字段
     const safe = { ...data };
@@ -218,13 +215,14 @@ class ProjectService {
   /**
    * 变更状态（active → completed / cancelled）
    */
-  async changeStatus(id, status, userId, userRole) {
+  async changeStatus(id, status, userId, userRole, dataFilter) {
     if (!['active', 'completed', 'cancelled'].includes(status)) {
       throw new ValidationError('状态值非法');
     }
-    const project = await Project.findByPk(id);
+    const project = await Project.findOne({
+      where: { id, ...this._resolveScopeFilter(userId, userRole, dataFilter) }
+    });
     if (!project) throw new NotFoundError('项目不存在');
-    this._ensureWritable(project, userId, userRole);
 
     await project.update({ status });
     return project;
@@ -237,10 +235,11 @@ class ProjectService {
    *   - 仅解除关联（把关联 Contract/Payment/Inventory 的 project_id 置 null），
    *     不删除原始单据（单据应独立存在，避免数据丢失）
    */
-  async delete(id, userId, userRole) {
-    const project = await Project.findByPk(id);
+  async delete(id, userId, userRole, dataFilter) {
+    const project = await Project.findOne({
+      where: { id, ...this._resolveScopeFilter(userId, userRole, dataFilter) }
+    });
     if (!project) throw new NotFoundError('项目不存在');
-    this._ensureWritable(project, userId, userRole);
 
     await sequelize.transaction(async (t) => {
       // 解除合同关联
@@ -322,8 +321,8 @@ class ProjectService {
    * @param {number} id 项目 ID
    * @returns {Promise<Project>} 刷新后的项目实例
    */
-  async refreshAggregates(id) {
-    const project = await Project.findByPk(id);
+  async refreshAggregates(id, dataFilter) {
+    const project = await Project.findOne({ where: { id, ...(dataFilter || {}) } });
     if (!project) throw new NotFoundError('项目不存在');
 
     const { saleAmount, purchaseAmount, taxCost, maintainCost, grossProfit } =
@@ -376,8 +375,10 @@ class ProjectService {
    *   maintain_fees: [...]   // 年费流水
    * }
    */
-  async getProfitDetail(id) {
-    const project = await Project.findByPk(id);
+  async getProfitDetail(id, userId, userRole, dataFilter) {
+    const project = await Project.findOne({
+      where: { id, ...this._resolveScopeFilter(userId, userRole, dataFilter) }
+    });
     if (!project) throw new NotFoundError('项目不存在');
 
     // 只读：实时计算聚合返回，不写库（落库由 refreshAggregates / 定时任务负责）
@@ -444,47 +445,32 @@ class ProjectService {
    * @param {string} [query.end_date]    按 create_time 止
    * @returns {Promise<Object>}
    */
-  async getProfitSummary(query) {
+  async getProfitSummary(query, userId, userRole, dataFilter) {
     const { start_date, end_date } = query || {};
-
-    const where = [];
-    const replacements = {};
-
-    if (start_date) {
-      where.push('create_time >= :start_date');
-      replacements.start_date = start_date;
-    }
-    if (end_date) {
-      where.push('create_time <= :end_date');
-      replacements.end_date = end_date;
+    const where = { ...this._resolveScopeFilter(userId, userRole, dataFilter) };
+    if (start_date || end_date) {
+      where.create_time = {};
+      if (start_date) where.create_time[Op.gte] = start_date;
+      if (end_date) where.create_time[Op.lte] = end_date;
     }
 
-    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
-
-    const [row] = await sequelize.query(
-      `SELECT
-         COUNT(*) AS count,
-         COALESCE(SUM(sale_amount), 0) AS sale,
-         COALESCE(SUM(purchase_amount), 0) AS purchase,
-         COALESCE(SUM(tax_cost), 0) AS tax,
-         COALESCE(SUM(maintain_cost), 0) AS maintain,
-         COALESCE(SUM(gross_profit), 0) AS gross
-       FROM projects
-       ${whereClause}`,
-      { replacements, type: QueryTypes.SELECT }
-    );
-
-    // 完成项目的汇总
-    const [completedRow] = await sequelize.query(
-      `SELECT
-         COUNT(*) AS count,
-         COALESCE(SUM(gross_profit), 0) AS gross
-       FROM projects
-       WHERE status = 'completed'
-         ${start_date ? "AND create_time >= :start_date" : ''}
-         ${end_date ? "AND create_time <= :end_date" : ''}`,
-      { replacements, type: QueryTypes.SELECT }
-    );
+    const aggregateAttributes = [
+      [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('sale_amount')), 0), 'sale'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('purchase_amount')), 0), 'purchase'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('tax_cost')), 0), 'tax'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('maintain_cost')), 0), 'maintain'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('gross_profit')), 0), 'gross']
+    ];
+    const row = await Project.findOne({ attributes: aggregateAttributes, where, raw: true });
+    const completedRow = await Project.findOne({
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+        [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('gross_profit')), 0), 'gross']
+      ],
+      where: { ...where, status: 'completed' },
+      raw: true
+    });
 
     return {
       all: {
@@ -502,20 +488,6 @@ class ProjectService {
     };
   }
 
-  // ==================== 私有工具 ====================
-
-  /**
-   * 【私有】检查写权限（创建人或负责人）
-   */
-  _ensureWritable(project, userId, userRole) {
-    if (userRole === 'agent') {
-      const isOwner = project.owner_id === userId;
-      const isCreator = project.created_by === userId;
-      if (!isOwner && !isCreator) {
-        throw new ValidationError('无权操作该项目');
-      }
-    }
-  }
 }
 
 module.exports = new ProjectService();

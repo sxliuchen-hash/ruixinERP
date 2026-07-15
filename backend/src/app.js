@@ -9,12 +9,15 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
-const { connectDatabase } = require('./config/database');
-const { connectMainDatabase } = require('./config/mainDatabase');
+const { connectRequiredDatabases } = require('./config/startupDatabases');
+const { connectRequiredRedis } = require('./config/startupRedis');
+const { shutdownRuntime } = require('./config/runtimeResources');
+const { assertProductionRuntimeConfig } = require('./services/unifiedAuthPreflightService');
+const { checkReadiness } = require('./services/readinessService');
 const errorHandler = require('./middlewares/errorHandler');
 const { NotFoundError } = require('./utils/errors');
 const routes = require('./routes');
-const { initJobs } = require('./jobs');
+const { initJobs, stopJobs } = require('./jobs');
 
 const app = express();
 
@@ -64,22 +67,39 @@ const limiter = rateLimit({
     message: '请求过于频繁，请稍后再试'
   }
 });
-app.use('/api/', limiter);
-
 // 合同/审批附件统一通过鉴权的 /api/v1/files 代理下载，
 // 不再以 express.static 公开 uploads 目录，避免未授权直接访问敏感附件
 
 // ==================== 路由 ====================
 
-// Health check
-app.get('/api/v1/health', (req, res) => {
+function sendLiveness(req, res) {
   res.json({
     success: true,
     message: 'ERP Backend is running',
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development'
   });
+}
+
+// 兼容旧探针；live 只表示进程可响应，不代表依赖已经就绪。
+app.get('/api/v1/health', sendLiveness);
+app.get('/api/v1/health/live', sendLiveness);
+
+// ready 仅检查本地运行配置、ERP 数据库和当前功能所需 Redis，
+// 不在负载均衡探针中重复调用主项目远程接口。
+app.get('/api/v1/health/ready', async (req, res) => {
+  const readiness = await checkReadiness();
+  res.status(readiness.ready ? 200 : 503).json({
+    success: readiness.ready,
+    code: readiness.ready ? 'READY' : 'NOT_READY',
+    message: readiness.ready ? 'ERP Backend is ready' : 'ERP Backend is not ready',
+    timestamp: new Date().toISOString(),
+    data: readiness
+  });
 });
+
+// Health probes must remain reliable even when business traffic is rate-limited.
+app.use('/api/', limiter);
 
 // 业务路由（统一注册）
 app.use('/api/v1', routes);
@@ -95,26 +115,70 @@ app.use(errorHandler);
 // ==================== 启动服务 ====================
 
 const PORT = process.env.PORT || 3001;
+let activeServer = null;
+let shuttingDown = false;
 
-const start = async () => {
+const start = async ({
+  runtimeConfigCheck = assertProductionRuntimeConfig,
+  connectDatabases = connectRequiredDatabases,
+  connectRedis = connectRequiredRedis,
+  startJobs = initJobs,
+  listen = (port, callback) => app.listen(port, callback),
+  shutdown = (options) => shutdownRuntime(options),
+  exit = (code) => process.exit(code)
+} = {}) => {
   try {
-    // 连接数据库
-    await connectDatabase();
-    await connectMainDatabase();
+    // Fail before local dependencies, background jobs, or the listening socket.
+    // This gate validates local configuration only; remote contract smoke stays in deployment.
+    await runtimeConfigCheck();
+    await connectDatabases();
+    await connectRedis();
 
-    // 初始化定时任务
-    initJobs();
+    // Start background jobs only after all startup gates pass.
+    startJobs();
 
-    app.listen(PORT, () => {
+    activeServer = listen(PORT, () => {
       logger.info(`ERP Backend 启动成功，端口: ${PORT}`);
       logger.info(`环境: ${process.env.NODE_ENV || 'development'}`);
     });
+    return activeServer;
   } catch (error) {
-    logger.error('服务启动失败:', error);
-    process.exit(1);
+    logger.error('服务启动失败', {
+      name: error?.name || 'Error',
+      code: error?.code || 'STARTUP_ERROR'
+    });
+    await shutdown({ server: activeServer, stopJobs }).catch(() => undefined);
+    exit(1);
+    return null;
   }
 };
 
-start();
+async function handleShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info('收到退出信号，开始释放运行资源', { signal });
+  try {
+    await shutdownRuntime({ server: activeServer, stopJobs });
+    logger.info('运行资源释放完成', { signal });
+    logger.close();
+    process.exit(0);
+  } catch (error) {
+    logger.error('运行资源释放失败', {
+      signal,
+      name: error?.name || 'Error',
+      code: error?.code || 'SHUTDOWN_ERROR'
+    });
+    logger.close();
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  process.once('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.once('SIGINT', () => handleShutdown('SIGINT'));
+  start();
+}
 
 module.exports = app;
+module.exports.start = start;
+module.exports.handleShutdown = handleShutdown;

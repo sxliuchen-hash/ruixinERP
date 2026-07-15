@@ -137,23 +137,6 @@ export const INVOICE_STATUS_MAP = {
 }
 
 /**
- * 用户角色
- */
-export const USER_ROLE = {
-  ADMIN: 'admin',
-  FINANCE: 'finance',
-  MANAGER: 'manager',
-  STAFF: 'staff'
-}
-
-export const USER_ROLE_MAP = {
-  [USER_ROLE.ADMIN]: { label: '管理员' },
-  [USER_ROLE.FINANCE]: { label: '财务' },
-  [USER_ROLE.MANAGER]: { label: '经理' },
-  [USER_ROLE.STAFF]: { label: '员工' }
-}
-
-/**
  * 银行账户类型
  */
 export const ACCOUNT_TYPE = {

@@ -21,7 +21,8 @@
  *   本服务不直接写 payments 或 account 余额，保证单一数据源。
  *
  * 【数据隔离】
- *   agent 只能操作自己创建的借款单；还款操作绑定借款所有权。
+ *   路由按权限 grant 生成 created_by 的 self/team/all 范围；还款操作绑定借款范围。
+ *   服务层缺失或收到非法 dataFilter 时必须 fail-closed。
  * ============================================================
  */
 
@@ -33,6 +34,59 @@ const LoanRepayment = require('../models/LoanRepayment');
 const BankAccount = require('../models/BankAccount');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 const { parsePagination } = require('../utils/pagination');
+
+const DENY_DATA_FILTER = Object.freeze({ created_by: -1 });
+
+function normalizeDataFilter(dataFilter) {
+  if (!dataFilter || typeof dataFilter !== 'object' || Array.isArray(dataFilter)) {
+    return { ...DENY_DATA_FILTER };
+  }
+
+  const keys = Object.keys(dataFilter);
+  if (keys.length === 0) return {};
+  if (keys.length !== 1 || keys[0] !== 'created_by') return { ...DENY_DATA_FILTER };
+
+  const ownerScope = dataFilter.created_by;
+  if (Number.isInteger(Number(ownerScope))) {
+    return { created_by: Number(ownerScope) };
+  }
+
+  const teamIds = ownerScope && typeof ownerScope === 'object'
+    ? ownerScope[Op.in]
+    : null;
+  if (!Array.isArray(teamIds)) return { ...DENY_DATA_FILTER };
+
+  const normalizedIds = [...new Set(teamIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0))];
+
+  return normalizedIds.length > 0
+    ? { created_by: { [Op.in]: normalizedIds } }
+    : { ...DENY_DATA_FILTER };
+}
+
+function appendSqlDataFilter(where, replacements, dataFilter) {
+  const normalized = normalizeDataFilter(dataFilter);
+  if (Object.keys(normalized).length === 0) return;
+
+  const ownerScope = normalized.created_by;
+  if (Number.isInteger(ownerScope)) {
+    where.push('created_by = :scope_created_by');
+    replacements.scope_created_by = ownerScope;
+    return;
+  }
+
+  const teamIds = ownerScope && typeof ownerScope === 'object'
+    ? ownerScope[Op.in]
+    : null;
+  if (Array.isArray(teamIds) && teamIds.length > 0) {
+    where.push('created_by IN (:scope_created_by_ids)');
+    replacements.scope_created_by_ids = teamIds;
+    return;
+  }
+
+  where.push('1 = 0');
+}
 
 class LoanService {
   /**
@@ -46,18 +100,13 @@ class LoanService {
    * @param {string} [query.end_date]     借款日期止
    * @param {string} [query.keyword]      关键词（purpose/remark/sp_no）
    */
-  async getList(query, userId, userRole) {
+  async getList(query, dataFilter) {
     const { page, limit, offset } = parsePagination(query);
     const {
       user_id, status, account_id, start_date, end_date, keyword
     } = query;
 
-    const where = {};
-
-    // 数据隔离
-    if (userRole === 'agent') {
-      where.created_by = userId;
-    }
+    const where = normalizeDataFilter(dataFilter);
 
     if (user_id) where.user_id = parseInt(user_id, 10);
     if (status) where.status = status;
@@ -110,8 +159,9 @@ class LoanService {
   /**
    * 获取借款详情（含还款明细）
    */
-  async getDetail(id, userId, userRole) {
-    const loan = await Loan.findByPk(id, {
+  async getDetail(id, dataFilter) {
+    const loan = await Loan.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) },
       include: [
         { model: BankAccount, as: 'account', attributes: ['id', 'name', 'account_type'] },
         {
@@ -128,11 +178,6 @@ class LoanService {
     if (!loan) {
       throw new NotFoundError('借款单不存在');
     }
-    // 数据隔离：agent 仅能查看自己创建的记录
-    if (userRole === 'agent' && loan.created_by !== userId) {
-      throw new NotFoundError('借款单不存在');
-    }
-
     const obj = loan.toJSON();
     const amount = parseFloat(obj.amount) || 0;
     const repaid = parseFloat(obj.repaid_amount) || 0;
@@ -189,14 +234,12 @@ class LoanService {
    *   - repaid_amount 和 status 由系统自动维护，不允许外部直接修改
    *   - 修改 amount 后需重新评估 status（极少场景，但要正确处理）
    */
-  async update(id, data, userId, userRole) {
-    const loan = await Loan.findByPk(id);
+  async update(id, data, dataFilter) {
+    const loan = await Loan.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!loan) {
       throw new NotFoundError('借款单不存在');
-    }
-
-    if (userRole === 'agent' && loan.created_by !== userId) {
-      throw new ValidationError('无权编辑该借款单');
     }
 
     // 剥离受系统管控的字段
@@ -235,14 +278,12 @@ class LoanService {
   /**
    * 删除借款单（级联删除还款记录）
    */
-  async delete(id, userId, userRole) {
-    const loan = await Loan.findByPk(id);
+  async delete(id, dataFilter) {
+    const loan = await Loan.findOne({
+      where: { id, ...normalizeDataFilter(dataFilter) }
+    });
     if (!loan) {
       throw new NotFoundError('借款单不存在');
-    }
-
-    if (userRole === 'agent' && loan.created_by !== userId) {
-      throw new ValidationError('无权删除该借款单');
     }
 
     await sequelize.transaction(async (t) => {
@@ -268,16 +309,15 @@ class LoanService {
    * @param {number} loanId
    * @param {Object} data { amount, repay_date, account_id, remark }
    * @param {number} userId
-   * @param {string} userRole
+   * @param {Object} dataFilter
    */
-  async addRepayment(loanId, data, userId, userRole) {
-    const loan = await Loan.findByPk(loanId);
+  async addRepayment(loanId, data, userId, dataFilter) {
+    const scopedFilter = normalizeDataFilter(dataFilter);
+    const loan = await Loan.findOne({
+      where: { id: loanId, ...scopedFilter }
+    });
     if (!loan) {
       throw new NotFoundError('借款单不存在');
-    }
-
-    if (userRole === 'agent' && loan.created_by !== userId) {
-      throw new ValidationError('无权对该借款单进行还款');
     }
 
     if (!data.amount || parseFloat(data.amount) <= 0) {
@@ -301,7 +341,14 @@ class LoanService {
 
     // 事务 + 行锁：锁定借款行后再校验「不超额」，避免并发还款各自读到旧 repaid_amount 导致超还
     const repayment = await sequelize.transaction(async (t) => {
-      const locked = await Loan.findByPk(loanId, { transaction: t, lock: t.LOCK.UPDATE });
+      const locked = await Loan.findOne({
+        where: { id: loanId, ...scopedFilter },
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+      if (!locked) {
+        throw new NotFoundError('借款单不存在');
+      }
       const currentRepaid = parseFloat(locked.repaid_amount) || 0;
       const loanAmount = parseFloat(locked.amount) || 0;
       // 已还 + 本次 超过借款金额时拦截（允许等于，即一次性还清；0.01 容差避免浮点误差）
@@ -331,14 +378,12 @@ class LoanService {
   /**
    * 删除还款记录（事务内回算 repaid_amount + status）
    */
-  async deleteRepayment(loanId, repaymentId, userId, userRole) {
-    const loan = await Loan.findByPk(loanId);
+  async deleteRepayment(loanId, repaymentId, dataFilter) {
+    const loan = await Loan.findOne({
+      where: { id: loanId, ...normalizeDataFilter(dataFilter) }
+    });
     if (!loan) {
       throw new NotFoundError('借款单不存在');
-    }
-
-    if (userRole === 'agent' && loan.created_by !== userId) {
-      throw new ValidationError('无权删除该还款记录');
     }
 
     const repayment = await LoanRepayment.findOne({
@@ -359,11 +404,12 @@ class LoanService {
   /**
    * 借款概况统计（分状态 + 总金额）
    */
-  async getSummary(query) {
+  async getSummary(query, dataFilter) {
     const { user_id } = query || {};
 
     const where = [];
     const replacements = {};
+    appendSqlDataFilter(where, replacements, dataFilter);
 
     if (user_id) {
       where.push('user_id = :user_id');

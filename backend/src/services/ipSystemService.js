@@ -5,8 +5,9 @@
  * 对接知识产权官文管理系统（iptt.top），复用其专利年费查询数据。
  *
  * 【认证方式】
- *   ERP 与 IP 系统共用 users 表和 JWT Secret，
- *   因此 ERP 用户的 Token 可直接用于调用 IP 系统 API。
+ *   目标模式为 client_credentials：ERP 使用独立服务凭证，并用 acting user header
+ *   告知主项目当前操作用户。联调过渡期可通过 IP_AUTH_MODE=legacy_shared_jwt
+ *   回退到共享 JWT；client_credentials 模式不会透传浏览器 Token。
  *
  * 【可用接口】
  *   - GET /patent-fee/list       年费列表（分页）
@@ -24,6 +25,7 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
 const { AppError } = require('../utils/errors');
+const ipApiAuthService = require('./ipApiAuthService');
 
 // IP 系统 API 基础地址（同服务器优先用内网）
 const IP_API_BASE = process.env.IP_API_BASE_URL || 'http://127.0.0.1:3000/api/v1';
@@ -34,31 +36,15 @@ const REQUEST_TIMEOUT = 15000;
 class IpSystemService {
   /**
    * 创建带认证的 axios 实例
-   * @param {string} token - 当前用户的 JWT Token
+   * @param {import('express').Request} req - 当前 ERP 请求
    * @returns {import('axios').AxiosInstance}
    */
-  _createClient(token) {
+  _createClient(req) {
     return axios.create({
       baseURL: IP_API_BASE,
       timeout: REQUEST_TIMEOUT,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+      headers: ipApiAuthService.buildUserRequestHeaders(req)
     });
-  }
-
-  /**
-   * 从请求头中提取 Token
-   * @param {import('express').Request} req
-   * @returns {string}
-   */
-  _extractToken(req) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AppError('无法获取认证令牌', 401, 'UNAUTHORIZED');
-    }
-    return authHeader.split(' ')[1];
   }
 
   /**
@@ -113,8 +99,7 @@ class IpSystemService {
    * @returns {Promise<Object>} 年费详情数据
    */
   async getPatentFeeDetail(patentNo, req) {
-    const token = this._extractToken(req);
-    const client = this._createClient(token);
+    const client = this._createClient(req);
 
     // 优先尝试代查接口（支持任意专利号）
     try {
@@ -142,8 +127,7 @@ class IpSystemService {
    * @returns {Promise<Object>}
    */
   async getPatentInfo(patentNo, req) {
-    const token = this._extractToken(req);
-    const client = this._createClient(token);
+    const client = this._createClient(req);
 
     try {
       const response = await client.get(`/patents/no/${encodeURIComponent(patentNo)}`);
@@ -160,8 +144,7 @@ class IpSystemService {
    * @returns {Promise<Object>} { list, total, page, pageSize }
    */
   async getPatentFeeList(params, req) {
-    const token = this._extractToken(req);
-    const client = this._createClient(token);
+    const client = this._createClient(req);
 
     try {
       const response = await client.get('/patent-fee/list', { params });
@@ -177,8 +160,7 @@ class IpSystemService {
    * @returns {Promise<Object>} { urgent, warning, overdue, normal, terminated, total }
    */
   async getPatentFeeDashboard(req) {
-    const token = this._extractToken(req);
-    const client = this._createClient(token);
+    const client = this._createClient(req);
 
     try {
       const response = await client.get('/patent-fee/dashboard');

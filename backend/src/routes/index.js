@@ -5,6 +5,9 @@
 const express = require('express');
 const router = express.Router();
 
+// 服务到服务内部接口（独立凭证保护）
+router.use('/internal', require('./internal'));
+
 // 认证路由（无需 auth 中间件）
 router.use('/auth', require('./auth'));
 
@@ -74,20 +77,5 @@ router.use('/payroll', require('./payroll'));
 router.use('/patent-fee', require('./patentFee'));
 // 系统设置
 router.use('/system-settings', require('./systemSettings'));
-
-// TODO: Phase 2 剩余
-// router.use('/wechat', require('./wechat'));
-
-// TODO: Phase 3
-// router.use('/projects', require('./projects'));
-// router.use('/inventory', require('./inventory'));
-// router.use('/costs', require('./costs'));
-
-// TODO: Phase 4
-// router.use('/reconciliation', require('./reconciliation'));
-// router.use('/export', require('./export'));
-// router.use('/import', require('./import'));
-// router.use('/config', require('./config'));
-// router.use('/logs', require('./logs'));
 
 module.exports = router;

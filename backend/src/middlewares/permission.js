@@ -1,16 +1,27 @@
 const { ForbiddenError } = require('../utils/errors');
+const { Op } = require('sequelize');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
+const { getPermissionGrant } = require('../permissions/permissionGrant');
+const { requirePermission } = require('./requirePermission');
+const { attachPermissionDataScope, DENY_MATCH_VALUE } = require('../permissions/dataScope');
+const { LEGACY_ERP_ROLES } = require('../permissions/legacyRoleAdapter');
 
-// 允许访问 ERP 的角色
-const ERP_ROLES = ['admin', 'process', 'agent'];
+// 仅供 legacy 密码会话兼容；main_sso 不根据角色名决定 ERP 访问权。
+const ERP_ROLES = LEGACY_ERP_ROLES;
 
 /**
- * 角色权限中间件
- * 检查 req.user.role 是否在允许的角色列表中
+ * legacy 角色权限兼容中间件。
+ * main_sso 只能复用前置 Manifest 权限校验产生的 grant，不能凭角色名放行。
+ * 新业务路由不得继续使用该中间件。
  * @param  {...string} roles - 允许的角色列表
  * @returns {Function} Express 中间件
  */
 function requireRole(...roles) {
   return (req, res, next) => {
+    if (req.user?.authSource === 'main_sso') {
+      if (req.permissionCode && req.permissionGrant?.allowed === true) return next();
+      return next(new ForbiddenError('SSO 会话必须通过 Manifest 权限校验'));
+    }
     if (!req.user || !req.user.role) {
       return next(new ForbiddenError('无法获取用户角色信息'));
     }
@@ -24,31 +35,24 @@ function requireRole(...roles) {
 }
 
 /**
- * ERP 访问权限中间件
- * 检查角色是否为 admin/process/agent，其他角色返回 403
+ * ERP 入口权限兼容别名，实际统一校验 erp.app.view。
  * @returns {Function} Express 中间件
  */
 function requireErpAccess() {
-  return (req, res, next) => {
-    if (!req.user || !req.user.role) {
-      return next(new ForbiddenError('无法获取用户角色信息'));
-    }
-
-    if (!ERP_ROLES.includes(req.user.role)) {
-      return next(new ForbiddenError('您的角色无权访问 ERP 系统'));
-    }
-
-    next();
-  };
+  return requirePermission(PERMISSIONS.APP_VIEW);
 }
 
 /**
- * 管理员权限中间件
- * 仅 admin 角色可访问
+ * legacy 管理员兼容中间件。
+ * main_sso 必须已经通过前置 Manifest 权限校验，不能凭 admin 角色名放行。
  * @returns {Function} Express 中间件
  */
 function requireAdmin() {
   return (req, res, next) => {
+    if (req.user?.authSource === 'main_sso') {
+      if (req.permissionCode && req.permissionGrant?.allowed === true) return next();
+      return next(new ForbiddenError('SSO 会话必须通过 Manifest 权限校验'));
+    }
     if (!req.user || !req.user.role) {
       return next(new ForbiddenError('无法获取用户角色信息'));
     }
@@ -62,9 +66,10 @@ function requireAdmin() {
 }
 
 /**
- * 数据隔离过滤器
- * agent 角色只能看到自己的数据（owner_id = user.id 或 created_by = user.id）
- * admin 和 process 可以看到所有数据
+ * 数据隔离过滤器。
+ * 指定 permissionCode 时严格执行 Manifest grant 的 self/team/all scope；
+ * 未指定 permissionCode 时只为 legacy 会话保留 admin/process/agent 兼容逻辑，
+ * main_sso 一律 fail-closed。
  *
  * 用法：
  *   const filter = dataFilter(req);
@@ -77,10 +82,30 @@ function requireAdmin() {
  * @returns {Object} Sequelize where 条件对象，agent 返回 { [ownerField]: user.id }，其他返回 {}
  */
 function dataFilter(req, options = {}) {
-  const { ownerField = 'owner_id' } = options;
+  const { ownerField = 'owner_id', permissionCode, teamUserIds } = options;
+
+  if (permissionCode) {
+    const grant = getPermissionGrant(req.user, permissionCode);
+    if (!grant.allowed) return { [ownerField]: DENY_MATCH_VALUE };
+    if (grant.scope === 'all') return {};
+    if (grant.scope === 'self') return { [ownerField]: req.user.id };
+    if (grant.scope === 'team' && Array.isArray(teamUserIds) && teamUserIds.length > 0) {
+      return { [ownerField]: { [Op.in]: teamUserIds } };
+    }
+    return { [ownerField]: DENY_MATCH_VALUE };
+  }
+
+  // SSO 会话必须显式指定业务权限，不能退化为基于角色的范围判断。
+  if (req.user?.authSource === 'main_sso') {
+    return { [ownerField]: DENY_MATCH_VALUE };
+  }
 
   // admin 和 process 可以看到所有数据
-  if (!req.user || req.user.role === 'admin' || req.user.role === 'process') {
+  if (!req.user) {
+    return { [ownerField]: DENY_MATCH_VALUE };
+  }
+
+  if (req.user.role === 'admin' || req.user.role === 'process') {
     return {};
   }
 
@@ -89,8 +114,7 @@ function dataFilter(req, options = {}) {
     return { [ownerField]: req.user.id };
   }
 
-  // 其他角色不应该到达这里（应被 requireErpAccess 拦截）
-  // 但作为安全兜底，返回一个不可能匹配的条件
+  // legacy 未知角色显式拒绝，不能退化为全量数据。
   return { [ownerField]: -1 };
 }
 
@@ -99,7 +123,10 @@ function dataFilter(req, options = {}) {
  * 将数据过滤条件附加到 req.dataFilter 上，供 controller/service 使用
  *
  * 用法：
- *   router.get('/contracts', authenticate, requireErpAccess(), attachDataFilter(), contractController.list);
+ *   router.get('/contracts', authenticate,
+ *     requirePermission(PERMISSIONS.CONTRACT_VIEW),
+ *     attachDataFilter({ permissionCode: PERMISSIONS.CONTRACT_VIEW }),
+ *     contractController.list);
  *   // 在 controller 中：const filter = req.dataFilter;
  *
  * @param {Object} [options] - 配置选项
@@ -107,6 +134,11 @@ function dataFilter(req, options = {}) {
  * @returns {Function} Express 中间件
  */
 function attachDataFilter(options = {}) {
+  if (options.permissionCode) {
+    const { permissionCode, ...scopeOptions } = options;
+    return attachPermissionDataScope(permissionCode, scopeOptions);
+  }
+
   return (req, res, next) => {
     req.dataFilter = dataFilter(req, options);
     next();

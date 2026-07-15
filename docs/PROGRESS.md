@@ -1,6 +1,8 @@
 # 内部财务管理系统 - 开发进度文档
 
-> 最后更新：2026-06-13
+> 2026-07-11 更新：ERP 代码侧统一权限与 SSO、权限数据范围、企微安全、显式数据库迁移、薪酬结构启动门禁、同一备份工件恢复及精确 COS 灾备下载均已实现。文件和跨系统登录均不再接受 `?token=`；全量 SSO 配置下 ERP 不再加载或连接主项目数据库。代码验收已全绿，生产上线仍受主项目地址/凭证/公钥/账号、真实 MySQL/Redis/COS/企微、生产停写发布流程和灰度计划约束。
+
+> 最后更新：2026-07-11
 > 维护者：单会话接管开发
 
 ---
@@ -39,14 +41,14 @@
 - **提成归属**：取决于「所属月」，`payrollService` 现用同月查询业绩即正确。
 
 ### D. 后续计划 / 待改造（保留项，按需推进）
-> **增量完成（2026-06-13）**：✅ 对账 `extra` 跨批次排除；✅ 借款还款事务 + 行锁；✅ 文件下载一次性票据（token 治理「文件」部分，前后端落地，保留 `?token=` 兼容）。
+> **统一认证、数据库与企微安全收口（2026-07-11，2026-07-14 复验）**：✅ R7 RP state、一次性 Code、RS256 assertion、Manifest v1.3.0（30 模块/117 权限/192 唯一路由）、`self/team/all`、`permissionVersion`、Employee 幂等建档、工资导出双权限和文件一次性 Ticket 已完成；✅ 全量 SSO 不再连接主项目数据库，启动配置/ERP 数据库/Redis/ready/资源关闭门禁已完成；✅ 企微合同/付款/报销唯一 `sp_no`、pending 重放和未绑定策略已完成；✅ 薪酬结构与 `system_settings` 均使用显式幂等迁移，冲突结构 fail-closed，启动和生产 preflight 只读 fail-closed；✅ 数据库备份生成原子 gzip/SHA/receipt，local 与 COS 模式均只恢复 receipt 指定的精确字节流，远端模式使用独立只读凭证、精确 key/version/ETag 且禁止 list/latest；✅ 两个历史一键部署入口已变为无条件 `exit 78` 的拒绝桩，新增只读 release precheck、pinned-digest 恢复镜像门禁和连续 3 次成功的 ready 等待器；✅ CI MySQL 8.4 镜像已固定 digest；✅ Vite 6.4.3，前端完整审计为 0。最终本地验收：后端 60 passed + 1 skipped suites、823 passed + 9 skipped tests；delivery safety 11 suites / 158 tests；前端权限/SSO 7 suites / 111 tests；备份恢复 3 suites / 71 tests；薪酬门禁 5 suites / 89 tests；前后端 lint 0 error；构建和 `git diff --check` 通过。后端 audit 剩余 3 moderate、0 high/critical，按不可达调用面的有期限例外管理。⏳ 尚待主项目受控环境信息、七类账号、真实 SSO/企微/COS/MySQL/Redis、生产迁移、停写发布、灰度和旧认证下线；两个历史一键入口已不可执行，生产发布必须走受控手工维护流程。
+> **主项目二次回填（2026-07-15）**：✅ 已确认 `iptt.top`/`erp.iptt.top` 全套目标地址、四套 Client ID 命名、首次部署 active-only、300 秒建档重试和权限分页累计加载；⏳ M-06、M-08、M-09、M-12、M-13、M-16～M-19 必须在干净生产候选 Commit/Tag、服务器部署和真实联调后完成。当前 HEAD `0cb15a1`，已忽略 `tmp/`，普通状态项仍为 279 个；SSH 公钥登录、真实 Secret/active key 和首个管理员测试账号尚待人工处理。
 
-1. **URL token 治理（剩 SSO 部分）**：文件下载已用一次性票据 ✅；剩 SSO「code 换 token」需主项目 + 前端联调。
+1. **跨项目 SSO 联调**：两侧 R7 代码契约已具备；主项目代码基线为 `c633dc0`，待受控环境配置测试/生产地址、Manifest/SSO/provisioning/业务 API 四套凭证、active/previous 公钥与七类测试账号后执行真实 smoke；生产前还需轮换历史基线中曾出现非占位值的 `WECHAT_SECRET`。
 2. 往来账详情三列表共用一个分页参数 → 拆分为各自分页或仅返回汇总 + 近 N 条。
-3. `wechatSyncService.syncContract` 多步写入包事务（部分失败 + sp_no 幂等会漏建辅助记录）。
-4. `InventoryService.batchChangePrice` 并发行锁（低频，低优）。
-5. agent 在 Dashboard 的数据隔离；Dashboard Redis 缓存 + 净利润指标卡。
-6. 其余前端页面（除合同详情外）的文件预览/下载切换为票据（当前仍用 `?token=`，后端已兼容）。
+3. `InventoryService.batchChangePrice` 并发行锁（低频，低优）。
+4. agent 在 Dashboard 的数据隔离；Dashboard Redis 缓存 + 净利润指标卡。
+5. 文件预览/下载入口继续按 `erp.file.download` 做前端可见性复核；后端不再接受 URL 长效 Token。
 
 ### E. 交付物与里程碑（2026-06-13）
 - **里程碑**：本批全部成果已合入 `main`（最新 `61c136d`，与远程同步）。
@@ -55,10 +57,11 @@
   - `docs/代码审查报告.md` —— 两轮 + 增量审查、修复状态表
   - `docs/关键流程回归清单.md` —— 上线前回归步骤
   - `docs/方案-URL-Token治理.md` —— 票据 + code 换 token 设计
-  - `.github/workflows/ci.yml` —— CI 工作流（push/PR 自动跑 ESLint + Jest）
+  - `docs/2026-07-11-R8-HttpOnly-Cookie会话迁移方案.md` —— Redis opaque session、Cookie、CSRF 与四阶段迁移方案
+  - `.github/workflows/ci.yml` —— CI 工作流（后端 lint/Jest、前端生产构建、Secret/部署/Shell 交付门禁）
 - **工程化**：引入 ESLint；Jest 单测（26 用例，覆盖提成/个税/请假/进度/分页）；`backend/tests/integration/` 集成测试脚手架（默认跳过，配置测试库后启用）。
 - **质量门禁**：ESLint 全量 0 error；Jest 全绿；后端模块加载 LOAD-OK。
-- **CI**：`.github/workflows/ci.yml` 已启用 ✅（push/PR 自动跑 ESLint + Jest）。
+- **CI**：`.github/workflows/ci.yml` 已启用 ✅（push/PR 和手动触发，独立执行 backend、frontend、delivery-safety）。
 - **待办（需人工）**：上线前按《关键流程回归清单》在测试环境验证。
 
 ---
@@ -80,7 +83,7 @@
 | FIX-1 | 补建缺失 classify-rules 路由（修复后端启动崩溃） | routes/classifyRules.js | — | ✅ 2026-06-08 |
 
 **进行中（需求已确认，分阶段实现）**：薪酬模块重构已主体完成，详见
-`docs/薪酬模块-业绩上传与工资条设计.md`。待补：采购提成独立报表页、个税升级累计预扣法、工资条 Excel 导出。
+`docs/薪酬模块-业绩上传与工资条设计.md`。工资条 Excel 导出已于 R7 收口；待补：采购提成独立报表页、个税升级累计预扣法。
 
 **SEC-1 水印关键点**：
 - Canvas 平铺生成水印背景，文案 = 姓名@账号 + 手机尾号 + 日期
@@ -115,8 +118,8 @@
 **✅ T18 银行流水对账**：Excel 灵活列映射 + 精确/模糊匹配算法 + 三栏对比 UI + 一键创建付款。
 **✅ T19 数据导出**：通用 ExportButton 组件 + 7 个后端导出接口（payments/contracts/inventory/invoices/expenses/projects/costs）+ 6 个列表页集成导出按钮（复用当前筛选条件）。
 **✅ T20 历史数据迁移**：Excel 模板下载 + 上传预览校验 + 事务批量导入（合同/收付款/专利库存/成本记录）+ 重复检测 + 名称→ID 自动匹配。
-**✅ T21 系统切换**：ERP 侧 SystemSwitch + Token URL 接收已就绪；主项目侧集成指南已编写（docs/T21-main-project-integration.md）。
-**✅ T22 部署上线**：Nginx 配置 + 部署脚本 + 生产 .env 模板 + PM2 配置全部就绪；22.4 验证测试需部署后执行。
+**✅ T21 系统切换**：ERP 侧 SystemSwitch 仅打开主项目地址且不携带 ERP Token；进入 ERP 时主项目入口先跳 ERP `/sso/initiate`，ERP 生成并绑定浏览器 `state`，主项目 authorize 后回调 `/sso/callback?code=...&state=...`，ERP 前端清除 URL 后调用 `POST /api/v1/auth/sso/exchange` 兑换独立短会话。
+**✅ T22 部署交付代码**：Nginx 配置、生产 .env 模板、PM2 配置、只读 release precheck 和 ready 等待器已就绪；历史一键部署脚本已禁用。真实生产上线、22.4 验证和放流仍需受控环境执行。
 **🎯 Phase 4 工具+增强全部完成**！剩余任务：企微组 T9-T11/T13（需部署到公网后联调）。
 
 **模块说明**：
@@ -214,8 +217,8 @@
 | T18 | 银行流水对账 | BankStatement 模型 + 灵活 Excel 列映射解析（exceljs） + 精确/模糊匹配算法（金额 100% + 日期容差 + 摘要 bigram 相似度）+ 三栏对账结果 + 从流水一键创建付款（复用 paymentService，自动联动合同/cost_record）+ 手动匹配/解除/忽略 + 对账历史 + classify_rules 关键词归类建议 | ReconciliationPage（3 Tab：新建/结果/历史）+ 拖拽上传 + 列映射向导（含正负合并 / 收支分列两种银行格式） + 三栏可视化（matched/unmatched/extra）+ 未匹配一键创建付款弹窗 + 已匹配一键解除 + 批次删除 |
 | T19 | 数据导出 | exportService（7 模块导出：payments/contracts/inventory/invoices/expenses/projects/costs）+ exceljs 生成 .xlsx（含表头格式化、列宽自适应）+ exportController + routes/export.js（7 GET 路由）+ utils/excelHelper.js（sendExcel 响应封装）+ 操作日志记录导出行为 | ExportButton.vue 通用组件（path + params + 二次确认 + loading + Content-Disposition 文件名解析）+ 6 个列表页集成（PaymentList/ContractList/InventoryList/ExpenseList/ProjectList/CostList）+ exportParams 计算属性复用当前筛选条件 |
 | T20 | 历史数据迁移 | importService（模板生成 + 解析校验 + 事务批量写入）+ importController（3 接口：template/validate/execute）+ routes/import.js（multer 内存存储 + admin 限定）+ 4 种导入类型（contracts/payments/inventory/costs）+ 重复检测（contract_no/patent_no）+ 名称→ID 自动匹配（客户/供应商/账户/类别） | ImportPage.vue（4 步骤条：选择类型→上传文件→预览校验→导入结果）+ 模板下载 + 拖拽上传 + 校验结果分 Tab 展示（通过/失败）+ 二次确认 + 导入明细表格 |
-| T21 | 系统切换 | ERP 侧：SystemSwitch.vue（跳转主项目 + 携带 token）+ 路由守卫 token 接收 + .env 配置 | 主项目侧：集成指南文档（docs/T21-main-project-integration.md）含代码示例 + SSO 流程说明 |
-| T22 | 部署上线 | deploy/nginx.conf（SSL + 反向代理 + Gzip + 静态缓存）+ deploy/deploy.sh（自动化部署脚本）+ .env.production（生产环境变量模板）+ ecosystem.config.js（PM2 进程管理） | 部署文档 + 首次初始化流程 + 企微回调 URL 配置说明 |
+| T21 | 系统切换 | ERP 后端提供 `POST /api/v1/auth/sso/initiate` 创建 RP state，并通过 `POST /api/v1/auth/sso/exchange` 用主项目签发的一次性 Code + 同一 state 兑换 ERP 独立短会话 | `SystemSwitch.vue` 只打开主项目且不携带 Token；主项目入口先跳 ERP `/sso/initiate`，authorize 后回调 `/sso/callback?code=...&state=...`，ERP 回调页先清除 URL 再完成兑换；路由守卫只校验本地会话和权限编码 |
+| T22 | 部署交付 | deploy/nginx.conf（SSL + 反向代理 + Gzip + 静态缓存）+ 两个 legacy deploy 纯拒绝桩 + `precheck:release` + `wait:ready` + `.env.production.example`（真实 `.env.production` 已忽略）+ ecosystem.config.js | 受控手工维护流程 + 首次初始化 + 企微回调配置；真实生产上线待环境验收 |
 
 **T18 关键设计点**：
 - Excel 列映射可配置：前端让用户指定"交易日期在哪列、金额在哪列"等，支持国内各种银行的导出格式，不用写死解析规则
@@ -449,8 +452,8 @@ Phase 1-3 累积的优化项：
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + ECharts | ✅ |
 | 后端 | Express + Sequelize + MySQL + Redis | ✅ |
 | 校验 | Joi（middlewares/validate + validators/*） | ✅ |
-| 认证 | JWT（共享主项目 Secret） | ✅ |
-| 权限 | 角色 + 数据隔离（attachDataFilter） | ✅ |
+| 认证 | 主项目一次性 Code SSO + ERP 独立短会话；legacy 仅由开关控制 | ✅ |
+| 权限 | Manifest 权限码 + `self/team/all` + `permissionVersion` | ✅ |
 | 部署 | PM2 + Nginx (erp.iptt.top) | ⏳ T22 |
 | 集成 | 企业微信审批回调 + 消息推送 | ⏳ Phase 3 |
 
@@ -520,8 +523,8 @@ ERP/
 
 1. **企业微信凭证**：Phase 3 启动前需拿到 CorpID、Secret、Token、EncodingAESKey。
    开发阶段可 Mock 事件，端到端联调需要真实凭证。
-2. **跨库写入**：patent_notice_system 只读，Phase 3 需在主项目 users 表加
-   `wechat_work_userid` 字段（独立迁移脚本，需在主项目侧同步）。
+2. **企业微信绑定**：统一使用 ERP `employees.wechat_userid → employees.user_id`；
+   不再通过 username 猜测或要求 ERP 查询、修改主项目 `users` 表。
 3. **数据库迁移**：生产环境执行 `backend/scripts/init-database.sql`。
    每完成一个新模块，都要把对应 CREATE TABLE 追加到该脚本末尾（见验收清单）。
 4. **历史数据**：~2000 条数据需 Excel 模板标准化后批量导入（T20）。

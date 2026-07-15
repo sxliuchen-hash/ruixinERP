@@ -6,17 +6,16 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/systemSettingController');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess, requireAdmin } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 
 router.use(authenticate);
-router.use(requireErpAccess());
 
-// 所有人可读
-router.get('/', controller.getList);
-router.get('/:key', controller.getValue);
+router.get('/', requirePermission(PERMISSIONS.SYSTEM_VIEW), controller.getList);
+router.get('/:key', requirePermission(PERMISSIONS.SYSTEM_VIEW), controller.getValue);
 
-// 仅管理员可写
-router.put('/:key', requireAdmin(), controller.setValue);
-router.delete('/:key', requireAdmin(), controller.deleteValue);
+router.put('/:key', requirePermission(PERMISSIONS.SYSTEM_UPDATE), requireFreshPermissionVersion(), controller.setValue);
+router.delete('/:key', requirePermission(PERMISSIONS.SYSTEM_DELETE), requireFreshPermissionVersion(), controller.deleteValue);
 
 module.exports = router;

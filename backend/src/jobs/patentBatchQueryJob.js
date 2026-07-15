@@ -12,11 +12,11 @@
  * ============================================================
  */
 
-const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const redis = require('../config/redis');
 const PatentInventory = require('../models/PatentInventory');
 const patentAnomalyService = require('../services/patentAnomalyService');
+const ipApiAuthService = require('../services/ipApiAuthService');
 const logger = require('../utils/logger');
 
 const REQUEST_INTERVAL_MS = 3000;
@@ -33,25 +33,13 @@ const STOP_KEY = 'patent_scan_stop';
 let memoryProgress = null;
 let memoryStop = false;
 
-/**
- * 生成系统 Token（ERP 与 IP 系统共用 JWT_SECRET 和 users 表）
- * 自签的 Token 在 IP 系统同样有效
- */
-function generateSystemToken() {
-  return jwt.sign(
-    { id: parseInt(process.env.IP_SYSTEM_USER_ID, 10) || 1, username: 'system', role: 'admin' },
-    process.env.JWT_SECRET,
-    { expiresIn: '2h' }
-  );
-}
-
-async function fetchIpPatentDetail(patentNo, token) {
+async function fetchIpPatentDetail(patentNo, authHeaders) {
   // 使用代查接口（POST），支持查询任意专利号
   const response = await axios.post(
     `${IP_API_BASE}/patent-query/detail`,
     { patentNo },
     {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: authHeaders,
       timeout: 45000, // 首次查询国知局需要 15-30 秒
       validateStatus: (status) => status < 500
     }
@@ -72,11 +60,11 @@ async function fetchIpPatentDetail(patentNo, token) {
  * 调用 IP 系统获取专利基本信息（按专利号查 patents 表）
  * 注意：此接口只能查 IP 系统已录入的专利，查不到返回 null
  */
-async function fetchIpPatentInfo(patentNo, token) {
+async function fetchIpPatentInfo(patentNo, authHeaders) {
   const response = await axios.get(
     `${IP_API_BASE}/patents/no/${encodeURIComponent(patentNo)}`,
     {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: authHeaders,
       timeout: 15000,
       validateStatus: (status) => status < 500
     }
@@ -209,9 +197,9 @@ async function run() {
   // 清除之前的停止信号
   await clearStop();
 
-  // 2. 生成系统 Token（共用 JWT_SECRET，自签即可）
-  const token = generateSystemToken();
-  await appendLog(progress, '认证 Token 已生成');
+  // 2. 后台任务使用独立服务凭证；联调期可由 IP_AUTH_MODE 回退旧共享 JWT。
+  const authHeaders = ipApiAuthService.buildBackgroundRequestHeaders('patent-anomaly-scan');
+  await appendLog(progress, '主项目业务接口凭证已准备');
 
   let consecutiveFailures = 0;
 
@@ -235,7 +223,7 @@ async function run() {
 
     try {
       // 1) 调用年费详情接口（含应缴/已缴/发文/质押/许可/变更）
-      const ipFeeData = await fetchIpPatentDetail(inv.patent_no, token);
+      const ipFeeData = await fetchIpPatentDetail(inv.patent_no, authHeaders);
 
       if (!ipFeeData) {
         // 国知局查不到该专利号
@@ -252,7 +240,7 @@ async function run() {
       // 2) 调用专利基本信息接口（含发明人/代理/IPC/授权等）
       let ipPatentInfo = null;
       try {
-        ipPatentInfo = await fetchIpPatentInfo(inv.patent_no, token);
+        ipPatentInfo = await fetchIpPatentInfo(inv.patent_no, authHeaders);
       } catch (e2) {
         // 第二个接口失败不影响整体
         logger.warn(`[PatentBatchQueryJob] ${inv.patent_no} 基本信息获取失败: ${e2.message}`);

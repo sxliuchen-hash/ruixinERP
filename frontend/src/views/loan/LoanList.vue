@@ -60,7 +60,7 @@
             :value="key"
           />
         </el-select>
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.LOAN_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建借款
         </el-button>
       </div>
@@ -142,15 +142,15 @@
       <el-table-column label="操作" width="260" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
-            v-if="row.status !== 'paid'"
+            v-if="row.status !== 'paid' && can(PERMISSIONS.LOAN_REPAY)"
             type="success"
             link
             size="small"
             @click="handleRepay(row)"
           >还款</el-button>
           <el-button type="primary" link size="small" @click="handleViewRepayments(row)">明细</el-button>
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.LOAN_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.LOAN_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -341,7 +341,7 @@
           <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
           <el-table-column label="操作" width="80" align="center">
             <template #default="{ row }">
-              <el-button type="danger" link size="small" @click="handleDeleteRepayment(row)">删除</el-button>
+              <el-button v-if="can(PERMISSIONS.LOAN_REPAY)" type="danger" link size="small" @click="handleDeleteRepayment(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -367,6 +367,11 @@ import {
 import { formatMoney, formatDate } from '@/utils/format'
 import { LOAN_STATUS_MAP } from '@/utils/constants'
 import AccountSelect from '@/components/business/AccountSelect.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // ===== 列表状态 =====
 const loading = ref(false)

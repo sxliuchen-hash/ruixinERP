@@ -64,8 +64,8 @@ const Payment = sequelize.define('Payment', {
   },
   account_id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
-    comment: '银行账户ID，必填'
+    allowNull: true,
+    comment: '银行账户ID；企微 pending 记录可为空，confirmed 必须已唯一解析'
   },
   contract_id: {
     type: DataTypes.INTEGER,
@@ -106,6 +106,7 @@ const Payment = sequelize.define('Payment', {
   },
   created_by: {
     type: DataTypes.INTEGER,
+    allowNull: true,
     comment: '创建人（agent 数据隔离依据）'
   },
   applyer_name: {
@@ -126,7 +127,7 @@ const Payment = sequelize.define('Payment', {
     { fields: ['account_id'] },        // 账户流水聚合
     { fields: ['project_id'] },        // 项目利润聚合
     { fields: ['payment_date'] },      // 趋势图按日期查询
-    { fields: ['sp_no'] },             // 审批同步幂等查询
+    { name: 'uk_payments_sp_no', unique: true, fields: ['sp_no'] },
     { fields: ['confirm_status'] }     // 待确认筛选
   ]
 });

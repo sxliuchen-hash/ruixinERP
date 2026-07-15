@@ -27,6 +27,33 @@ const { buildExcel, buildFilename } = require('../utils/excelHelper');
 const PerformanceImport = require('../models/PerformanceImport');
 const PerformanceRecord = require('../models/PerformanceRecord');
 const Employee = require('../models/Employee');
+const { ValidationError } = require('../utils/errors');
+
+const CONFIRMED_PERIOD_INDEX = 'uk_performance_imports_confirmed_period';
+
+function duplicateConfirmedPeriodError(year, month, existingId) {
+  const batch = existingId ? `（#${existingId}）` : '';
+  return new ValidationError(
+    `${year}年${month}月已存在已确认的业绩批次${batch}，如需重传请先删除旧批次`
+  );
+}
+
+function isConfirmedPeriodUniqueError(error) {
+  if (error?.name !== 'SequelizeUniqueConstraintError') return false;
+  const fields = error.fields && typeof error.fields === 'object'
+    ? Object.keys(error.fields)
+    : [];
+  const detail = [
+    error?.message,
+    error?.parent?.message,
+    error?.parent?.sqlMessage,
+    error?.original?.message,
+    error?.original?.sqlMessage
+  ].filter(Boolean).join(' ');
+  return fields.includes('confirmed_period_key') ||
+    detail.includes(CONFIRMED_PERIOD_INDEX) ||
+    detail.includes('confirmed_period_key');
+}
 
 // ==================== 模板定义 ====================
 
@@ -210,49 +237,56 @@ class PerformanceUploadService {
       where: { year, month, status: 'confirmed' }
     });
     if (existedConfirmed) {
-      throw new Error(`${year}年${month}月已存在已确认的业绩批次（#${existedConfirmed.id}），如需重传请先删除旧批次`);
+      throw duplicateConfirmedPeriodError(year, month, existedConfirmed.id);
     }
 
-    return sequelize.transaction(async (t) => {
-      const totalPerformance = records.reduce(
-        (s, r) => s + (parseFloat(r.performance_amount) || 0), 0
-      );
+    try {
+      return await sequelize.transaction(async (t) => {
+        const totalPerformance = records.reduce(
+          (s, r) => s + (parseFloat(r.performance_amount) || 0), 0
+        );
 
-      const batch = await PerformanceImport.create({
-        year,
-        month,
-        file_name: file_name || null,
-        record_count: records.length,
-        total_performance: parseFloat(totalPerformance.toFixed(2)),
-        status: 'confirmed',
-        uploaded_by: userId,
-        confirmed_by: userId,
-        confirmed_at: new Date()
-      }, { transaction: t });
+        const batch = await PerformanceImport.create({
+          year,
+          month,
+          file_name: file_name || null,
+          record_count: records.length,
+          total_performance: parseFloat(totalPerformance.toFixed(2)),
+          status: 'confirmed',
+          uploaded_by: userId,
+          confirmed_by: userId,
+          confirmed_at: new Date()
+        }, { transaction: t });
 
-      const rows = records.map(r => ({
-        batch_id: batch.id,
-        year: r.year || year,
-        month: r.month || month,
-        employee_id: r.employee_id,
-        user_id: r.user_id,
-        employee_name: r.employee_name,
-        business_type: r.business_type,
-        serial_no: r.serial_no,
-        target_no: r.target_no,
-        target_name: r.target_name,
-        contract_amount: this._toNumber(r.contract_amount),
-        performance_amount: this._toNumber(r.performance_amount),
-        contract_date: r.contract_date || null,
-        final_payment_date: r.final_payment_date || null,
-        is_full_risk_agent: !!r.is_full_risk_agent,
-        remark: r.remark || ''
-      }));
+        const rows = records.map(r => ({
+          batch_id: batch.id,
+          year: r.year || year,
+          month: r.month || month,
+          employee_id: r.employee_id,
+          user_id: r.user_id,
+          employee_name: r.employee_name,
+          business_type: r.business_type,
+          serial_no: r.serial_no,
+          target_no: r.target_no,
+          target_name: r.target_name,
+          contract_amount: this._toNumber(r.contract_amount),
+          performance_amount: this._toNumber(r.performance_amount),
+          contract_date: r.contract_date || null,
+          final_payment_date: r.final_payment_date || null,
+          is_full_risk_agent: !!r.is_full_risk_agent,
+          remark: r.remark || ''
+        }));
 
-      await PerformanceRecord.bulkCreate(rows, { transaction: t });
+        await PerformanceRecord.bulkCreate(rows, { transaction: t });
 
-      return { batch_id: batch.id, record_count: rows.length };
-    });
+        return { batch_id: batch.id, record_count: rows.length };
+      });
+    } catch (error) {
+      if (isConfirmedPeriodUniqueError(error)) {
+        throw duplicateConfirmedPeriodError(year, month);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -364,3 +398,5 @@ class PerformanceUploadService {
 }
 
 module.exports = new PerformanceUploadService();
+module.exports.CONFIRMED_PERIOD_INDEX = CONFIRMED_PERIOD_INDEX;
+module.exports.isConfirmedPeriodUniqueError = isConfirmedPeriodUniqueError;

@@ -2,8 +2,8 @@
  * 成本管理接口封装
  *
  * 后端前缀：/api/v1/costs
- * 权限：authenticate + requireErpAccess（成本是公司级数据，不做 agent 隔离）
- *       类别 CRUD 仅 admin 可操作
+ * 权限：按 erp.cost.view 及具体操作权限编码校验。
+ *       成本数据只支持 all scope；类别 CRUD 按 erp.cost.create/update/delete 控制。
  */
 import request from './request'
 
@@ -19,17 +19,17 @@ export function getCostCategoryTree() {
   return request.get('/costs/categories/tree')
 }
 
-/** 创建类别（admin） */
+/** 创建类别（erp.cost.create） */
 export function createCostCategory(data) {
   return request.post('/costs/categories', data)
 }
 
-/** 更新类别（admin） */
+/** 更新类别（erp.cost.update） */
 export function updateCostCategory(id, data) {
   return request.put(`/costs/categories/${id}`, data)
 }
 
-/** 删除类别（admin，有引用则拒绝） */
+/** 删除类别（erp.cost.delete，有引用则拒绝） */
 export function deleteCostCategory(id) {
   return request.delete(`/costs/categories/${id}`)
 }
@@ -82,7 +82,7 @@ export function getCostYoyMom(params) {
   return request.get('/costs/summary/yoy-mom', { params })
 }
 
-/** 固定月费自动生成（admin 手动触发） */
+/** 固定月费自动生成（erp.cost.generate 手动触发） */
 export function generateRecurringCosts(data) {
   return request.post('/costs/recurring/generate', data)
 }

@@ -220,7 +220,7 @@
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="goDetail(row)">详情</el-button>
             <el-button
-              v-if="!isAgent"
+              v-if="userStore.can(PERMISSIONS.INVENTORY_UNSELL)"
               type="warning"
               link
               size="small"
@@ -246,7 +246,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { Back, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -260,10 +260,10 @@ import {
 import { formatMoney } from '@/utils/format'
 import { RESOURCE_TYPE_MAP } from '@/utils/constants'
 import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 
 const router = useRouter()
 const userStore = useUserStore()
-const isAgent = computed(() => userStore.userInfo?.role === 'agent')
 
 // ===== KPI =====
 const stats = ref({})

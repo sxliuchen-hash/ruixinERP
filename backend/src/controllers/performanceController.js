@@ -3,7 +3,7 @@
  * 业绩统计控制器（PerformanceController）
  * ============================================================
  * 路由前缀：/api/v1/performance
- * 权限：authenticate + requireErpAccess
+ * 权限：由路由层按具体 erp.performance.* 权限码校验
  *
  * 接口列表：
  *   GET /overview       - 业绩概览（统计卡片）

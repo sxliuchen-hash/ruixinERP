@@ -3,14 +3,14 @@
   归类规则管理页（ClassifyRules）
   ============================================================
   管理费用自动归类的关键词规则
-  仅 admin 可见
+  页面需 erp.classify_rule.view，操作按具体权限控制
   ============================================================
 -->
 <template>
   <div class="rules-container">
     <div class="page-header">
       <h3>归类规则</h3>
-      <el-button type="primary" @click="handleCreate">
+      <el-button v-if="can(PERMISSIONS.CLASSIFY_RULE_CREATE)" type="primary" @click="handleCreate">
         <el-icon><Plus /></el-icon>新建规则
       </el-button>
     </div>
@@ -29,8 +29,8 @@
       <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip />
       <el-table-column label="操作" width="140" align="center">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.CLASSIFY_RULE_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.CLASSIFY_RULE_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -73,6 +73,11 @@ import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/api/request'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const loading = ref(false)
 const ruleList = ref([])

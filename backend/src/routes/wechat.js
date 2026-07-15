@@ -25,7 +25,9 @@ const express = require('express');
 const router = express.Router();
 const wechatController = require('../controllers/wechatController');
 const { authenticate } = require('../middlewares/auth');
-const { requireAdmin } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 
 // ===== 回调组（无鉴权）=====
 router.get('/callback', wechatController.verifyCallback);
@@ -38,11 +40,10 @@ router.post(
 
 // ===== 管理组（admin 鉴权）=====
 router.use(authenticate);
-router.use(requireAdmin());
 
-router.get('/config', wechatController.getConfigStatus);
-router.get('/test-token', wechatController.testToken);
-router.get('/users/:userId', wechatController.getWechatUser);
-router.post('/sync', wechatController.manualSync);
+router.get('/config', requirePermission(PERMISSIONS.WECHAT_VIEW), wechatController.getConfigStatus);
+router.get('/test-token', requirePermission(PERMISSIONS.WECHAT_CONFIGURE), requireFreshPermissionVersion(), wechatController.testToken);
+router.get('/users/:userId', requirePermission(PERMISSIONS.WECHAT_CONFIGURE), requireFreshPermissionVersion(), wechatController.getWechatUser);
+router.post('/sync', requirePermission(PERMISSIONS.WECHAT_SYNC), requireFreshPermissionVersion(), wechatController.manualSync);
 
 module.exports = router;

@@ -11,7 +11,7 @@
     弹窗：新建/编辑表单
   业务规则：
     - pending（企微同步）/confirmed（人工确认），confirmed 影响账户余额
-    - 删除受数据隔离保护（agent 只能删自己创建的）
+    - 删除同时受 erp.expense.delete 权限和该 grant 的 self/team/all 数据范围保护
   待优化（后续任务补）：
     - 报销人下拉选择（需主项目 users 接口，T21 可能提供）
     - 成本类别下拉（T17 完成后）
@@ -69,9 +69,10 @@
         <ExportButton
           path="/export/expenses"
           :params="exportParams"
+          :permission="PERMISSIONS.EXPENSE_EXPORT"
           label="导出"
         />
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.EXPENSE_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建报销
         </el-button>
       </div>
@@ -158,14 +159,14 @@
       <el-table-column label="操作" width="200" align="center" fixed="right">
         <template #default="{ row }">
           <el-button
-            v-if="row.confirm_status === 'pending'"
+            v-if="row.confirm_status === 'pending' && can(PERMISSIONS.EXPENSE_APPROVE)"
             type="success"
             link
             size="small"
             @click="handleConfirm(row)"
           >确认</el-button>
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.EXPENSE_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.EXPENSE_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -297,6 +298,11 @@ import {
 import { formatMoney, formatDate } from '@/utils/format'
 import AccountSelect from '@/components/business/AccountSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // ===== 列表状态 =====
 const loading = ref(false)

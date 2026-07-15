@@ -2,8 +2,8 @@
  * 交易项目管理接口封装
  *
  * 后端前缀：/api/v1/projects
- * 权限：authenticate + requireErpAccess + attachDataFilter
- *       （agent 仅可见 created_by=自己 OR owner_id=自己 的项目）
+ * 权限：按 erp.project.* 权限编码校验，并按 grant 的 self/team/all scope
+ *       过滤 created_by 或 owner_id 对应的数据。
  */
 import request from './request'
 

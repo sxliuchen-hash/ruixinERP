@@ -81,6 +81,7 @@ const Contract = sequelize.define('Contract', {
   },
   created_by: {
     type: DataTypes.INTEGER,
+    allowNull: true,
     comment: '创建人'
   },
   applyer_name: {
@@ -95,7 +96,10 @@ const Contract = sequelize.define('Contract', {
   tableName: 'contracts',
   timestamps: true,
   createdAt: 'create_time',
-  updatedAt: 'update_time'
+  updatedAt: 'update_time',
+  indexes: [
+    { name: 'uk_contracts_sp_no', unique: true, fields: ['sp_no'] }
+  ]
 });
 
 module.exports = Contract;

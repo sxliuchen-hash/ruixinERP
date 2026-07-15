@@ -12,7 +12,7 @@ const GRADE_VALUES = ['A', 'B', 'C', 'D', 'E'];
  * 新建员工：name、role 必填
  */
 const createEmployeeSchema = Joi.object({
-  user_id: Joi.number().integer().allow(null),
+  user_id: Joi.number().integer().positive().allow(null),
   wechat_userid: Joi.string().max(50).allow('', null),
   name: Joi.string().max(50).required().messages({
     'string.empty': '姓名不能为空',
@@ -41,7 +41,7 @@ const createEmployeeSchema = Joi.object({
  * 更新员工：全部可选、无默认值（避免未传字段被默认值覆盖），至少 1 个字段
  */
 const updateEmployeeSchema = Joi.object({
-  user_id: Joi.number().integer().allow(null),
+  user_id: Joi.number().integer().positive().allow(null),
   wechat_userid: Joi.string().max(50).allow('', null),
   name: Joi.string().max(50),
   role: Joi.string().valid(...ROLE_VALUES),

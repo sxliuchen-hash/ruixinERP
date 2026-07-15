@@ -16,54 +16,56 @@ const { sendExcel } = require('../utils/excelHelper');
 
 async function exportPayments(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const { buffer, filename } = await exportService.exportPayments(req.query, userId, userRole);
+    const { buffer, filename } = await exportService.exportPayments(req.query, req.dataFilter);
     sendExcel(res, buffer, filename);
   } catch (e) { next(e); }
 }
 
 async function exportContracts(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const { buffer, filename } = await exportService.exportContracts(req.query, userId, userRole);
+    const { buffer, filename } = await exportService.exportContracts(req.query, req.dataFilter);
     sendExcel(res, buffer, filename);
   } catch (e) { next(e); }
 }
 
 async function exportInventory(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const { buffer, filename } = await exportService.exportInventory(req.query, userId, userRole);
+    const { buffer, filename } = await exportService.exportInventory(req.query, req.dataFilter);
     sendExcel(res, buffer, filename);
   } catch (e) { next(e); }
 }
 
 async function exportInvoices(req, res, next) {
   try {
-    const { buffer, filename } = await exportService.exportInvoices(req.query);
+    const { buffer, filename } = await exportService.exportInvoices(req.query, req.dataFilter);
     sendExcel(res, buffer, filename);
   } catch (e) { next(e); }
 }
 
 async function exportExpenses(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const { buffer, filename } = await exportService.exportExpenses(req.query, userId, userRole);
+    const { buffer, filename } = await exportService.exportExpenses(req.query, req.dataFilter);
     sendExcel(res, buffer, filename);
   } catch (e) { next(e); }
 }
 
 async function exportProjects(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const { buffer, filename } = await exportService.exportProjects(req.query, userId, userRole);
+    const { buffer, filename } = await exportService.exportProjects(req.query, req.dataFilter);
     sendExcel(res, buffer, filename);
   } catch (e) { next(e); }
 }
 
 async function exportCosts(req, res, next) {
   try {
-    const { buffer, filename } = await exportService.exportCosts(req.query);
+    const { buffer, filename } = await exportService.exportCosts(req.query, req.dataFilter);
+    sendExcel(res, buffer, filename);
+  } catch (e) { next(e); }
+}
+
+async function exportPayroll(req, res, next) {
+  try {
+    const { buffer, filename } = await exportService.exportPayroll(req.query, req.dataFilter);
     sendExcel(res, buffer, filename);
   } catch (e) { next(e); }
 }
@@ -75,5 +77,6 @@ module.exports = {
   exportInvoices,
   exportExpenses,
   exportProjects,
-  exportCosts
+  exportCosts,
+  exportPayroll
 };

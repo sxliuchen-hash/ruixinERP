@@ -7,93 +7,129 @@
  * 通过后端代理读取文件（COS erp-files/ 或本地 uploads/），不直接暴露 COS URL。
  *
  * 鉴权方式（下载二选一）：
- *   GET  /files/download?key=...               需 JWT（Header 或 ?token= 兼容）
+ *   GET  /files/download?key=...&resourceType=contract&resourceId=... 需 JWT
  *   GET  /files/download?ticket=...            一次性票据（60s、用后即焚），无需 JWT
- *   POST /files/ticket  { key }                需 JWT，换取一次性下载票据
+ *   POST /files/ticket  { key, resourceType, resourceId } 需 JWT，换取一次性下载票据
  *
- * 设计：`<img>` / 新窗口预览无法携带 Authorization 头，过去用 ?token= 把长效 JWT
- * 放进 URL（易经浏览器历史 / access log 泄漏）。改为「先用 JWT 换 60s 一次性票据，
- * 再用票据下载」，URL 中不再出现长效 JWT。`?token=` 暂时保留以兼容旧前端。
+ * 设计：`<img>` / 新窗口预览无法携带 Authorization 头时，先用 ERP 会话换取
+ * 60 秒一次性票据，再用票据下载。URL 中不接受 ERP 长效会话 Token。
  * ============================================================
  */
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
 const router = express.Router();
 const COS = require('cos-nodejs-sdk-v5');
-const redis = require('../config/redis');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess } = require('../middlewares/permission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
+const {
+  TICKET_TTL,
+  createTicket,
+  consumeTicket
+} = require('../services/fileTicketService');
+const {
+  normalizeFileKey,
+  isAllowedFileKey,
+  assertFileResourceAccess
+} = require('../services/fileResourceAccessService');
+const mainPermissionVersionService = require('../services/mainPermissionVersionService');
 
 // 本地降级附件根目录（与 contractService 降级写入路径一致：backend/uploads）
 const UPLOADS_ROOT = path.resolve(__dirname, '../../uploads');
-const TICKET_PREFIX = 'file_ticket:';
-const TICKET_TTL = 60; // 票据有效期（秒）
-
-// 支持 URL 参数传 token（兼容旧的文件预览/下载窗口场景）
-router.use((req, res, next) => {
-  if (!req.headers.authorization && req.query.token) {
-    req.headers.authorization = `Bearer ${req.query.token}`;
-  }
-  next();
-});
-
-/** 校验 key 是否在允许范围（COS erp-files/ 或本地 uploads/） */
-function isAllowedKey(key) {
-  const k = String(key || '').replace(/^\/+/, '');
-  return k.startsWith('erp-files/') || k.startsWith('uploads/');
-}
+const requireFreshPermissions = requireFreshPermissionVersion();
+const requireFileDownload = requirePermission(PERMISSIONS.FILE_DOWNLOAD);
 
 /**
  * POST /files/ticket - 换取一次性下载票据（需登录）
- * body: { key }
+ * body: { key, resourceType, resourceId }
  */
-router.post('/ticket', authenticate, requireErpAccess(), async (req, res, next) => {
-  try {
-    const { key } = req.body || {};
-    if (!key) return res.status(400).json({ message: '缺少 key 参数' });
-    if (!isAllowedKey(key)) return res.status(403).json({ message: '无权访问该文件' });
+router.post(
+  '/ticket',
+  authenticate,
+  requireFreshPermissions,
+  requireFileDownload,
+  async (req, res, next) => {
+    try {
+      const { key, resourceType, resourceId } = req.body || {};
+      if (!key) return res.status(400).json({ message: '缺少 key 参数' });
+      if (!isAllowedFileKey(key)) return res.status(403).json({ message: '无权访问该文件' });
 
-    const ticket = crypto.randomBytes(24).toString('hex');
-    await redis.set(TICKET_PREFIX + ticket, String(key), 'EX', TICKET_TTL);
-    res.json({ success: true, data: { ticket, expires_in: TICKET_TTL } });
-  } catch (e) {
-    next(e);
-  }
-});
+      const access = await assertFileResourceAccess({
+        user: req.user,
+        resourceType,
+        resourceId,
+        key
+      });
 
-/** 消费一次性票据，返回对应 key（不存在/过期返回 null） */
-async function consumeTicket(ticket) {
-  const rkey = TICKET_PREFIX + ticket;
-  const key = await redis.get(rkey);
-  if (key) {
-    redis.del(rkey).catch(() => {});
+      const ticket = await createTicket({
+        ...access,
+        userId: req.user.id,
+        permissionVersion: req.user.permissionVersion,
+        authSource: req.user.authSource
+      });
+      res.json({ success: true, data: { ticket, expires_in: TICKET_TTL } });
+    } catch (e) {
+      next(e);
+    }
   }
-  return key;
-}
+);
 
 /** ticket 或 JWT 二选一：带 ticket 则跳过 JWT（票据本身即凭证），否则走 JWT 鉴权 */
 function ticketOrAuth(req, res, next) {
   if (req.query.ticket) return next();
   authenticate(req, res, (err) => {
     if (err) return next(err);
-    requireErpAccess()(req, res, next);
+    requireFreshPermissions(req, res, (freshError) => {
+      if (freshError) return next(freshError);
+      requireFileDownload(req, res, next);
+    });
   });
 }
 
 /**
- * GET /files/download?key=xxx&preview=1  或  ?ticket=xxx
+ * GET /files/download?key=xxx&resourceType=contract&resourceId=1  或  ?ticket=xxx
  * preview=1 时在浏览器内预览（inline），否则触发下载（attachment）
  */
 router.get('/download', ticketOrAuth, async (req, res, next) => {
   try {
     let { key } = req.query;
-    const { preview, ticket } = req.query;
+    const { preview, ticket, resourceType, resourceId } = req.query;
 
     if (ticket) {
-      key = await consumeTicket(ticket);
-      if (!key) return res.status(403).json({ message: '下载票据无效或已过期' });
+      const ticketPayload = await consumeTicket(ticket);
+      if (!ticketPayload) return res.status(403).json({ message: '下载票据无效或已过期' });
+
+      const ticketUser = {
+        id: ticketPayload.userId,
+        authSource: ticketPayload.authSource,
+        permissionVersion: ticketPayload.permissionVersion,
+        permissions: {
+          [ticketPayload.permissionCode]: {
+            allowed: true,
+            scope: ticketPayload.permissionScope
+          }
+        }
+      };
+      await mainPermissionVersionService.assertCurrentPermissionVersion(ticketUser, {
+        forceRefresh: true
+      });
+      const access = await assertFileResourceAccess({
+        user: ticketUser,
+        resourceType: ticketPayload.resourceType,
+        resourceId: ticketPayload.resourceId,
+        key: ticketPayload.key
+      });
+      key = access.key;
+    } else {
+      const access = await assertFileResourceAccess({
+        user: req.user,
+        resourceType,
+        resourceId,
+        key
+      });
+      key = access.key;
     }
     if (!key) return res.status(400).json({ message: '缺少 key 参数' });
 
@@ -105,7 +141,7 @@ router.get('/download', ticketOrAuth, async (req, res, next) => {
 
 /** 按 key 提供文件：本地 uploads/ 走文件系统，erp-files/ 走 COS */
 async function serveByKey(key, preview, res) {
-  const normalizedKey = String(key).replace(/^\/+/, '');
+  const normalizedKey = normalizeFileKey(key);
 
   // 本地降级附件
   if (normalizedKey.startsWith('uploads/')) {
@@ -113,7 +149,7 @@ async function serveByKey(key, preview, res) {
   }
 
   // COS 文件：仅允许 erp-files/ 前缀
-  if (!key.startsWith('erp-files/')) {
+  if (!normalizedKey.startsWith('erp-files/') && !normalizedKey.startsWith('erp/contracts/')) {
     return res.status(403).json({ message: '无权访问该文件' });
   }
 
@@ -125,14 +161,14 @@ async function serveByKey(key, preview, res) {
   cos.getObject({
     Bucket: process.env.COS_BUCKET,
     Region: process.env.COS_REGION,
-    Key: key
+    Key: normalizedKey
   }, (err, data) => {
     if (err) {
       return res.status(404).json({ message: '文件不存在' });
     }
     const buffer = data.Body;
-    const contentType = detectContentType(buffer, key);
-    const filename = key.split('/').pop();
+    const contentType = detectContentType(buffer, normalizedKey);
+    const filename = normalizedKey.split('/').pop();
     res.setHeader('Content-Type', contentType);
     if (preview === '1' && (contentType.includes('pdf') || contentType.includes('image'))) {
       res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);

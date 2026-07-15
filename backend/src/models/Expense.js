@@ -39,7 +39,7 @@ const Expense = sequelize.define('Expense', {
   },
   user_id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     comment: '报销人（关联主项目 users.id）'
   },
   amount: {
@@ -79,6 +79,7 @@ const Expense = sequelize.define('Expense', {
   },
   created_by: {
     type: DataTypes.INTEGER,
+    allowNull: true,
     comment: '创建人（agent 数据隔离依据）'
   }
 }, {
@@ -91,7 +92,7 @@ const Expense = sequelize.define('Expense', {
     { fields: ['cost_category_id'] },
     { fields: ['expense_date'] },
     { fields: ['account_id'] },
-    { fields: ['sp_no'] },
+    { name: 'uk_expenses_sp_no', unique: true, fields: ['sp_no'] },
     { fields: ['confirm_status'] }
   ]
 });

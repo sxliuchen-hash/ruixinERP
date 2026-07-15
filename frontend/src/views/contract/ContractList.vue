@@ -35,9 +35,10 @@
         <ExportButton
           path="/export/contracts"
           :params="exportParams"
+          :permission="PERMISSIONS.CONTRACT_EXPORT"
           label="导出"
         />
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.CONTRACT_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建合同
         </el-button>
       </div>
@@ -102,9 +103,9 @@
           <router-link :to="`/contracts/${row.id}`" class="action-link">
             <el-button type="primary" link size="small">详情</el-button>
           </router-link>
-          <el-button type="warning" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="success" link size="small" @click="handleStatusChange(row)">变更</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.CONTRACT_UPDATE)" type="warning" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.CONTRACT_UPDATE)" type="success" link size="small" @click="handleStatusChange(row)">变更</el-button>
+          <el-button v-if="can(PERMISSIONS.CONTRACT_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -236,6 +237,11 @@ import { CONTRACT_STATUS_MAP } from '@/utils/constants'
 import CustomerSelect from '@/components/business/CustomerSelect.vue'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // 列表相关
 const loading = ref(false)

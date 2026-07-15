@@ -3,7 +3,7 @@
   员工档案管理页（EmployeeList）
   ============================================================
   功能：员工列表 + 新建/编辑 + 转正/离职 + 职级变更
-  仅 admin 可见
+  页面访问需 erp.employee.view，操作按 erp.employee.* 权限控制
   ============================================================
 -->
 <template>
@@ -23,7 +23,7 @@
           <el-option label="正式" value="regular" />
           <el-option label="离职" value="resigned" />
         </el-select>
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.EMPLOYEE_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建员工
         </el-button>
       </div>
@@ -68,23 +68,23 @@
       <el-table-column prop="wechat_userid" label="企微ID" width="110" />
       <el-table-column label="操作" width="240" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.EMPLOYEE_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button
-            v-if="row.status === 'probation'"
+            v-if="row.status === 'probation' && can(PERMISSIONS.EMPLOYEE_CHANGE_STATUS)"
             type="success" link size="small"
             @click="handleRegular(row)"
           >转正</el-button>
           <el-button
-            v-if="row.status !== 'resigned'"
+            v-if="row.status !== 'resigned' && can(PERMISSIONS.EMPLOYEE_CHANGE_STATUS)"
             type="warning" link size="small"
             @click="handleResign(row)"
           >离职</el-button>
           <el-button
-            v-if="row.role === 'sales'"
+            v-if="row.role === 'sales' && can(PERMISSIONS.EMPLOYEE_UPDATE)"
             type="info" link size="small"
             @click="handleGradeChange(row)"
           >调级</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.EMPLOYEE_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -195,6 +195,11 @@ import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEmployeeList, createEmployee, updateEmployee, deleteEmployee, changeGrade, changeStatus } from '@/api/employee'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const ROLE_MAP = {
   boss: { label: '老板', type: 'danger' },

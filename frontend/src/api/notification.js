@@ -2,7 +2,7 @@
  * 系统消息接口封装
  *
  * 后端前缀：/api/v1/notifications
- * 权限：authenticate + requireErpAccess（用户只看自己的 + 广播给 admin 的消息）
+ * 权限：细粒度 notification 权限；个人消息可读写，共享广播只读
  */
 import request from './request'
 

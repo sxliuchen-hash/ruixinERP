@@ -19,7 +19,7 @@
       </h3>
       <div class="header-actions">
         <el-button
-          v-if="userStore.isAdmin"
+          v-if="can(PERMISSIONS.INVENTORY_ANOMALY_SCAN)"
           type="primary"
           :loading="scanLoading"
           @click="handleTriggerScan"
@@ -163,7 +163,7 @@
             查看详情
           </el-button>
           <el-button
-            v-if="!row.is_resolved"
+            v-if="!row.is_resolved && can(PERMISSIONS.INVENTORY_ANOMALY_RESOLVE)"
             type="success"
             link
             size="small"
@@ -253,9 +253,11 @@ import {
 } from '@/api/inventory'
 import { ANOMALY_SEVERITY_MAP, ANOMALY_TYPE_MAP } from '@/utils/constants'
 import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 
 const router = useRouter()
 const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const loading = ref(false)
 const list = ref([])

@@ -104,13 +104,13 @@
         <el-button type="success" plain @click="goSoldAnalytics">
           <el-icon><TrendCharts /></el-icon>已售统计
         </el-button>
-        <el-badge :value="anomalyCount.danger" :hidden="!anomalyCount.danger" type="danger">
+        <el-badge v-if="can(PERMISSIONS.INVENTORY_ANOMALY_VIEW)" :value="anomalyCount.danger" :hidden="!anomalyCount.danger" type="danger">
           <el-button type="danger" plain @click="goAnomalyPage">
             <el-icon><Warning /></el-icon>异常告警
           </el-button>
         </el-badge>
         <el-button
-          v-if="userStore.isAdmin"
+          v-if="can(PERMISSIONS.INVENTORY_SYNC)"
           type="primary"
           plain
           :loading="batchSyncLoading"
@@ -121,26 +121,27 @@
         <ExportButton
           path="/export/inventory"
           :params="exportParams"
+          :permission="PERMISSIONS.INVENTORY_EXPORT"
           label="导出"
         />
-        <el-button type="success" @click="openBatchPriceDialog">
+        <el-button v-if="can(PERMISSIONS.INVENTORY_UPDATE)" type="success" @click="openBatchPriceDialog">
           <el-icon><Money /></el-icon>批量调价
         </el-button>
         <el-button
-          v-if="userStore.isAdmin && selectedRows.length > 0"
+          v-if="can(PERMISSIONS.INVENTORY_BATCH_DELETE) && selectedRows.length > 0"
           type="danger"
           @click="handleBatchDelete"
         >
           <el-icon><Delete /></el-icon>批量删除 ({{ selectedRows.length }})
         </el-button>
-        <el-dropdown trigger="click" @command="handleCreateCommand">
+        <el-dropdown v-if="canAny([PERMISSIONS.INVENTORY_CREATE, PERMISSIONS.INVENTORY_IMPORT])" trigger="click" @command="handleCreateCommand">
           <el-button type="primary">
             <el-icon><Plus /></el-icon>入库<el-icon style="margin-left: 4px"><ArrowDown /></el-icon>
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="single">单个入库</el-dropdown-item>
-              <el-dropdown-item command="batch">批量入库（Excel）</el-dropdown-item>
+              <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_CREATE)" command="single">单个入库</el-dropdown-item>
+              <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_IMPORT)" command="batch">批量入库（Excel）</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -209,7 +210,7 @@
       stripe
       @selection-change="handleSelectionChange"
     >
-      <el-table-column v-if="userStore.isAdmin" type="selection" width="50" fixed="left" />
+      <el-table-column v-if="can(PERMISSIONS.INVENTORY_BATCH_DELETE)" type="selection" width="50" fixed="left" />
       <el-table-column prop="patent_no" label="专利号" width="150" fixed="left" />
       <el-table-column prop="patent_name" label="名称" min-width="200" show-overflow-tooltip />
       <el-table-column label="资源类型" width="120" align="center">
@@ -269,30 +270,30 @@
       <el-table-column label="操作" width="280" align="center" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="success" link size="small" @click="handlePriceChange(row)">调价</el-button>
-          <el-dropdown trigger="click" @command="cmd => handleStatusCommand(row, cmd)">
+          <el-button v-if="can(PERMISSIONS.INVENTORY_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.INVENTORY_UPDATE)" type="success" link size="small" @click="handlePriceChange(row)">调价</el-button>
+          <el-dropdown v-if="canAny([PERMISSIONS.INVENTORY_UPDATE, PERMISSIONS.INVENTORY_SELL, PERMISSIONS.INVENTORY_UNSELL])" trigger="click" @command="cmd => handleStatusCommand(row, cmd)">
             <el-button type="warning" link size="small">
               状态<el-icon><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="in_stock" :disabled="row.status === 'in_stock'">
+                <el-dropdown-item v-if="can(row.status === 'sold' ? PERMISSIONS.INVENTORY_UNSELL : PERMISSIONS.INVENTORY_UPDATE)" command="in_stock" :disabled="row.status === 'in_stock'">
                   回库
                 </el-dropdown-item>
-                <el-dropdown-item command="sold" :disabled="row.status === 'sold'">
+                <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_SELL)" command="sold" :disabled="row.status === 'sold'">
                   标记售出
                 </el-dropdown-item>
-                <el-dropdown-item command="transferring" :disabled="row.status === 'transferring'">
+                <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_UPDATE)" command="transferring" :disabled="row.status === 'transferring'">
                   转让中
                 </el-dropdown-item>
-                <el-dropdown-item command="abandoned" :disabled="row.status === 'abandoned'">
+                <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_UPDATE)" command="abandoned" :disabled="row.status === 'abandoned'">
                   放弃
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.INVENTORY_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -719,6 +720,7 @@ import {
 import { formatMoney, formatDate } from '@/utils/format'
 import { INVENTORY_STATUS_MAP, RESOURCE_TYPE_MAP } from '@/utils/constants'
 import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ContractSelect from '@/components/business/ContractSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
@@ -728,6 +730,8 @@ import MarkAsSoldDialog from './MarkAsSoldDialog.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
+const canAny = (permissionCodes) => userStore.canAny(permissionCodes)
 
 // ===== 列表状态 =====
 const loading = ref(false)
@@ -1094,7 +1098,7 @@ function handleSelectionChange(rows) {
   selectedRows.value = rows
 }
 
-/** 批量删除（仅管理员） */
+/** 批量删除（erp.inventory.batch_delete） */
 async function handleBatchDelete() {
   if (selectedRows.value.length === 0) return
 

@@ -38,6 +38,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({ rules: Array })
 const emit = defineEmits(['save'])

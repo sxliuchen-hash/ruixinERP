@@ -14,12 +14,12 @@ export function getSetting(key) {
   return request.get(`/system-settings/${key}`)
 }
 
-/** 更新设置（仅管理员） */
+/** 更新设置（erp.system.update） */
 export function updateSetting(key, value, description, category) {
   return request.put(`/system-settings/${key}`, { value, description, category })
 }
 
-/** 删除设置（仅管理员） */
+/** 删除设置（erp.system.delete） */
 export function deleteSetting(key) {
   return request.delete(`/system-settings/${key}`)
 }

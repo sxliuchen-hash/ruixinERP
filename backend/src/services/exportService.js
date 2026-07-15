@@ -15,19 +15,19 @@
  *   expenses      报销明细
  *   projects      交易项目（含利润）
  *   costs         成本记录
+ *   payroll       工资条明细
  *
  * 【安全限制】
  *   - 最大导出 5000 条，防止全量拉取把数据库打爆
  *   - 使用与列表一致的筛选，保证用户看到的和导出的一致
  *
  * 【数据隔离】
- *   已在各 service 层 getList 内处理（agent 仅导出自己相关），
- *   exportService 调用时传入同样的 userId/userRole 即可。
+ *   路由组合模块 view/export 两项权限，按更窄 scope 生成 dataFilter；
+ *   本服务不读取角色，缺失 dataFilter 时默认拒绝匹配。
  * ============================================================
  */
 
-const { Op, QueryTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const { Op } = require('sequelize');
 const Payment = require('../models/Payment');
 const Contract = require('../models/Contract');
 const Customer = require('../models/Customer');
@@ -39,18 +39,27 @@ const PatentInventory = require('../models/PatentInventory');
 const Project = require('../models/Project');
 const CostRecord = require('../models/CostRecord');
 const CostCategory = require('../models/CostCategory');
+const Payroll = require('../models/Payroll');
+const Employee = require('../models/Employee');
 const { buildExcel, buildFilename } = require('../utils/excelHelper');
 
 /** 单次导出最大条数（防拉爆） */
 const MAX_EXPORT = 5000;
+const DENY_EXPORT_FILTER = Object.freeze({ id: -1 });
+
+function normalizeExportDataFilter(dataFilter) {
+  if (!dataFilter || typeof dataFilter !== 'object' || Array.isArray(dataFilter)) {
+    return { ...DENY_EXPORT_FILTER };
+  }
+  return { ...dataFilter };
+}
 
 class ExportService {
   /**
    * 导出收付款明细
    */
-  async exportPayments(query, userId, userRole) {
-    const where = {};
-    if (userRole === 'agent') where.created_by = userId;
+  async exportPayments(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
     const {
       type, category, account_id, contract_id, customer_id, supplier_id,
       confirm_status, start_date, end_date, keyword
@@ -112,9 +121,8 @@ class ExportService {
   /**
    * 导出合同列表
    */
-  async exportContracts(query, userId, userRole) {
-    const where = {};
-    if (userRole === 'agent') where.owner_id = userId;
+  async exportContracts(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
     const { type, status, customer_id, supplier_id, keyword } = query;
     if (type) where.type = type;
     if (status) where.status = status;
@@ -167,9 +175,8 @@ class ExportService {
   /**
    * 导出专利库存清单
    */
-  async exportInventory(query, userId, userRole) {
-    const where = {};
-    if (userRole === 'agent') where.created_by = userId;
+  async exportInventory(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
     if (query.status) where.status = query.status;
     if (query.tech_field) where.tech_field = { [Op.like]: `%${query.tech_field}%` };
 
@@ -226,11 +233,29 @@ class ExportService {
   /**
    * 导出发票列表
    */
-  async exportInvoices(query) {
-    const where = {};
-    const { type, status, start_date, end_date } = query;
+  async exportInvoices(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
+    const {
+      type,
+      status,
+      contract_id,
+      customer_id,
+      supplier_id,
+      keyword,
+      start_date,
+      end_date
+    } = query;
     if (type) where.type = type;
     if (status) where.status = status;
+    if (contract_id) where.contract_id = parseInt(contract_id, 10);
+    if (customer_id) where.customer_id = parseInt(customer_id, 10);
+    if (supplier_id) where.supplier_id = parseInt(supplier_id, 10);
+    if (keyword) {
+      where[Op.or] = [
+        { invoice_no: { [Op.like]: `%${keyword}%` } },
+        { remark: { [Op.like]: `%${keyword}%` } }
+      ];
+    }
     if (start_date || end_date) {
       where.invoice_date = {};
       if (start_date) where.invoice_date[Op.gte] = start_date;
@@ -274,9 +299,8 @@ class ExportService {
   /**
    * 导出报销明细
    */
-  async exportExpenses(query, userId, userRole) {
-    const where = {};
-    if (userRole === 'agent') where.created_by = userId;
+  async exportExpenses(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
     const { user_id, cost_category_id, confirm_status, start_date, end_date } = query;
     if (user_id) where.user_id = parseInt(user_id, 10);
     if (cost_category_id) where.cost_category_id = parseInt(cost_category_id, 10);
@@ -326,11 +350,8 @@ class ExportService {
   /**
    * 导出交易项目（含利润）
    */
-  async exportProjects(query, userId, userRole) {
-    const where = {};
-    if (userRole === 'agent') {
-      where[Op.or] = [{ created_by: userId }, { owner_id: userId }];
-    }
+  async exportProjects(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
     if (query.status) where.status = query.status;
 
     const rows = await Project.findAll({
@@ -368,8 +389,8 @@ class ExportService {
   /**
    * 导出成本记录
    */
-  async exportCosts(query) {
-    const where = {};
+  async exportCosts(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
     if (query.cost_month) where.cost_month = query.cost_month;
     if (query.start_month) where.cost_month = { ...(where.cost_month || {}), [Op.gte]: query.start_month };
     if (query.end_month) where.cost_month = { ...(where.cost_month || {}), [Op.lte]: query.end_month };
@@ -408,6 +429,75 @@ class ExportService {
 
     return { buffer, filename: buildFilename('成本记录') };
   }
+
+  /**
+   * 导出工资条。工资属于公司级敏感数据，Manifest 只允许 all scope；
+   * 路由仍要求 payroll.view/export 两项权限取交集并实时校验权限版本。
+   */
+  async exportPayroll(query, dataFilter) {
+    const where = normalizeExportDataFilter(dataFilter);
+    const { year, month, status, employee_id } = query;
+    if (year) where.year = parseInt(year, 10);
+    if (month) where.month = parseInt(month, 10);
+    if (status) where.status = status;
+    if (employee_id) where.employee_id = parseInt(employee_id, 10);
+
+    const payrolls = await Payroll.findAll({
+      where,
+      order: [['year', 'DESC'], ['month', 'DESC'], ['is_adjustment', 'ASC'], ['net_salary', 'DESC']],
+      limit: MAX_EXPORT
+    });
+    const employeeIds = [...new Set(payrolls.map((row) => Number(row.employee_id)).filter(Number.isInteger))];
+    const employees = await Employee.findAll({
+      where: { id: { [Op.in]: employeeIds.length > 0 ? employeeIds : [0] } },
+      attributes: ['id', 'name', 'role', 'grade'],
+      raw: true
+    });
+    const employeeById = new Map(employees.map((employee) => [Number(employee.id), employee]));
+    const rows = payrolls.map((row) => {
+      const record = row.toJSON();
+      const employee = employeeById.get(Number(record.employee_id)) || {};
+      return {
+        ...record,
+        employee_name: employee.name || '',
+        employee_role: employee.role || '',
+        employee_grade: employee.grade || ''
+      };
+    });
+
+    const buffer = await buildExcel({
+      title: '工资条明细',
+      sheetName: '工资条',
+      columns: [
+        { header: '年份', key: 'year', width: 8 },
+        { header: '月份', key: 'month', width: 8 },
+        { header: '员工', key: 'employee_name', width: 16 },
+        { header: '岗位', key: 'employee_role', width: 12 },
+        { header: '职级', key: 'employee_grade', width: 8 },
+        { header: '基本工资', key: 'base_salary', width: 12, type: 'money' },
+        { header: '岗位补贴', key: 'position_allowance', width: 12, type: 'money' },
+        { header: '全勤奖', key: 'attendance_bonus', width: 12, type: 'money' },
+        { header: '职级津贴', key: 'grade_allowance', width: 12, type: 'money' },
+        { header: '销售提成', key: 'commission', width: 12, type: 'money' },
+        { header: '采购提成', key: 'purchase_commission', width: 12, type: 'money' },
+        { header: '奖金', key: 'bonus', width: 12, type: 'money' },
+        { header: '应发合计', key: 'gross_income', width: 14, type: 'money' },
+        { header: '社保公积金', key: 'social_insurance', width: 14, type: 'money' },
+        { header: '个人所得税', key: 'income_tax', width: 14, type: 'money' },
+        { header: '请假扣款', key: 'leave_deduction', width: 12, type: 'money' },
+        { header: '其他扣款', key: 'other_deduction', width: 12, type: 'money' },
+        { header: '扣除合计', key: 'total_deduction', width: 14, type: 'money' },
+        { header: '实发工资', key: 'net_salary', width: 14, type: 'money' },
+        { header: '调整项', key: 'is_adjustment', width: 10, formatter: (value) => value ? '是' : '否' },
+        { header: '状态', key: 'status', width: 10 },
+        { header: '备注', key: 'remark', width: 30 }
+      ],
+      rows
+    });
+
+    return { buffer, filename: buildFilename('工资条明细') };
+  }
 }
 
 module.exports = new ExportService();
+module.exports.normalizeExportDataFilter = normalizeExportDataFilter;

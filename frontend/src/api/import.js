@@ -24,6 +24,13 @@ export async function downloadTemplate(type) {
     })
 
     if (!res.ok) {
+      if (res.status === 401) {
+        void userStore.expireSession('session_expired')
+        const sessionError = new Error('ERP 登录已过期')
+        sessionError.sessionExpired = true
+        throw sessionError
+      }
+
       let msg = `下载失败（HTTP ${res.status}）`
       try {
         const errData = await res.json()
@@ -57,6 +64,7 @@ export async function downloadTemplate(type) {
 
     ElMessage.success(`已下载：${filename}`)
   } catch (error) {
+    if (error.sessionExpired) throw error
     if (!error.message.startsWith('下载失败')) {
       ElMessage.error('模板下载失败：' + error.message)
     }

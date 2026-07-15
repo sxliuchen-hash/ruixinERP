@@ -25,6 +25,7 @@ const Employee = sequelize.define('Employee', {
   user_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
+    unique: 'uk_employees_user_id',
     comment: '关联主项目 users.id'
   },
   wechat_userid: {

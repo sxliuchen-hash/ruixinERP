@@ -13,7 +13,7 @@
     - 业务类（business）：必须关联合同，type=income → 客户/type=expense → 供应商
     - 费用类（fee）：关联成本类别（当前用 ID 输入，T17 完成后改下拉）
     - 待确认（pending）：企微审批同步来的，点"确认"后才影响合同 paid_amount
-    - 数据隔离：agent 角色只看自己创建的记录（后端做）
+    - 数据隔离：后端按 erp.payment.view grant 的 self/team/all scope 执行
 
   待优化项：
     - 成本类别选择器（等 T17 cost_categories CRUD 完成）
@@ -55,9 +55,10 @@
         <ExportButton
           path="/export/payments"
           :params="exportParams"
+          :permission="PERMISSIONS.PAYMENT_EXPORT"
           label="导出"
         />
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.PAYMENT_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建收付款
         </el-button>
       </div>
@@ -128,7 +129,7 @@
         <template #default="{ row }">
           <!-- 仅 pending 显示确认按钮 -->
           <el-button
-            v-if="row.confirm_status === 'pending'"
+            v-if="row.confirm_status === 'pending' && can(PERMISSIONS.PAYMENT_CONFIRM)"
             type="success"
             link
             size="small"
@@ -136,8 +137,8 @@
           >
             确认
           </el-button>
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.PAYMENT_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.PAYMENT_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -294,6 +295,11 @@ import ContractSelect from '@/components/business/ContractSelect.vue'
 import CustomerSelect from '@/components/business/CustomerSelect.vue'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
 import ExportButton from '@/components/common/ExportButton.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // ===== 列表状态 =====
 const loading = ref(false)

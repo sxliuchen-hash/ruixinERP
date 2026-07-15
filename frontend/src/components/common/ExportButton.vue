@@ -6,6 +6,7 @@
     <ExportButton
       path="/export/payments"
       :params="{ type: filterType, start_date: filterStart }"
+      :permission="PERMISSIONS.PAYMENT_EXPORT"
       label="导出收付款"
     />
 
@@ -19,6 +20,7 @@
 -->
 <template>
   <el-button
+    v-if="userStore.can(permission)"
     :type="type"
     :size="size"
     :loading="loading"
@@ -35,6 +37,7 @@ import { ref } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { downloadExcel } from '@/api/export'
+import { useUserStore } from '@/stores/user'
 
 const props = defineProps({
   /** 导出路径（相对 /api/v1） */
@@ -50,10 +53,13 @@ const props = defineProps({
   /** 朴素风格 */
   plain: { type: Boolean, default: false },
   /** 点击后是否弹出二次确认 */
-  confirm: { type: Boolean, default: false }
+  confirm: { type: Boolean, default: false },
+  /** 当前业务模块对应的导出权限 */
+  permission: { type: String, required: true }
 })
 
 const loading = ref(false)
+const userStore = useUserStore()
 
 async function handleClick() {
   if (props.confirm) {

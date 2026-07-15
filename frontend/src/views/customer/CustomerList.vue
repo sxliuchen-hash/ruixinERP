@@ -16,7 +16,7 @@
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="can(PERMISSIONS.CUSTOMER_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建客户
         </el-button>
       </div>
@@ -32,9 +32,9 @@
       <el-table-column prop="tax_no" label="税号" min-width="160" show-overflow-tooltip />
       <el-table-column label="操作" width="200" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.CUSTOMER_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button type="success" link size="small" @click="handleViewSummary(row)">往来账</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.CUSTOMER_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -126,6 +126,11 @@ import {
   getCustomerSummary
 } from '@/api/customer'
 import { formatMoney } from '@/utils/format'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // 列表相关
 const loading = ref(false)

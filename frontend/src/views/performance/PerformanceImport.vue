@@ -6,7 +6,7 @@
   另含「上传历史」Tab：批次列表 + 明细查看 + 删除
 
   业务规则：
-    - 仅 admin 可访问
+    - 页面需 erp.performance_import.view，导入和删除使用独立权限
     - 核定业绩为提成基数；归属月取尾款日期所在月（缺失回退到选择的归属月）
     - 姓名匹配不到员工 → 标红，禁止确认
   ============================================================
@@ -79,7 +79,7 @@
 
           <div class="step-actions">
             <el-button @click="currentStep = 0">上一步</el-button>
-            <el-button type="primary" :disabled="!selectedFile" :loading="validateLoading" @click="handleValidate">
+            <el-button v-if="can(PERMISSIONS.PERFORMANCE_IMPORT_IMPORT)" type="primary" :disabled="!selectedFile" :loading="validateLoading" @click="handleValidate">
               上传并校验
             </el-button>
           </div>
@@ -157,6 +157,7 @@
           <div class="step-actions">
             <el-button @click="handleReset">重新上传</el-button>
             <el-button
+              v-if="can(PERMISSIONS.PERFORMANCE_IMPORT_IMPORT)"
               type="primary"
               :disabled="!canConfirm"
               :loading="importLoading"
@@ -202,7 +203,7 @@
           <el-table-column label="操作" width="160" align="center">
             <template #default="{ row }">
               <el-button link type="primary" size="small" @click="viewBatch(row.id)">明细</el-button>
-              <el-button link type="danger" size="small" @click="removeBatch(row.id)">删除</el-button>
+              <el-button v-if="can(PERMISSIONS.PERFORMANCE_IMPORT_DELETE)" link type="danger" size="small" @click="removeBatch(row.id)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -243,6 +244,11 @@ import {
   getPerformanceBatchRecords,
   deletePerformanceBatch
 } from '@/api/performanceImport'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 const activeTab = ref('upload')
 const currentStep = ref(0)

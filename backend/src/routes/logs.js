@@ -3,18 +3,21 @@
  * 操作日志路由
  * ============================================================
  * 路由前缀：/api/v1/logs
- * 仅 admin 可访问
+ * 需要 erp.audit.view
  * ============================================================
  */
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middlewares/auth');
-const { requireAdmin } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { requireFreshPermissionVersion } = require('../middlewares/permissionVersion');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
 
 router.use(authenticate);
-router.use(requireAdmin());
+router.use(requirePermission(PERMISSIONS.AUDIT_VIEW));
+router.use(requireFreshPermissionVersion());
 
 /**
  * GET /api/v1/logs - 查询操作日志
@@ -40,12 +43,14 @@ router.get('/', async (req, res, next) => {
       { replacements: params, type: QueryTypes.SELECT }
     );
 
-    // 主项目库名取自配置，避免硬编码（支持库名变更/多环境部署）
-    const mainDb = process.env.MAIN_DB_NAME || 'patent_notice_system';
     const logs = await sequelize.query(
-      `SELECT l.*, u.real_name as user_name
+      `SELECT l.*,
+              (SELECT e.name
+               FROM employees e
+               WHERE e.user_id = l.user_id
+               ORDER BY e.id ASC
+               LIMIT 1) AS user_name
        FROM operation_logs l
-       LEFT JOIN \`${mainDb}\`.users u ON u.id = l.user_id
        WHERE ${where}
        ORDER BY l.create_time DESC
        LIMIT ? OFFSET ?`,

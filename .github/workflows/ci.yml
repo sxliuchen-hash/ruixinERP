@@ -1,15 +1,20 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ main, "feature/**" ]
+    branches: [main, "feature/**"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   backend:
-    name: Backend Lint + Unit Test
+    name: Backend Lint + Full Jest
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -19,17 +24,159 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
       - name: Install deps
         run: npm ci
 
-      - name: ESLint
-        run: npx eslint src/
+      - name: Production dependency audit (high+)
+        run: npm audit --omit=dev --audit-level=high
 
-      # 纯函数单测；集成测试（tests/integration/*）默认 describe.skip，
-      # 需在配置了测试库的环境设置 RUN_DB_TESTS=1 才会执行（见 tests/integration/README.md）
-      - name: Jest (unit)
-        run: npx jest --ci
+      - name: ESLint
+        run: npm run lint
+
+      # Integration tests remain skipped unless RUN_DB_TESTS=1 is configured.
+      - name: Jest (full, open handles visible)
+        run: npm run test:ci
+
+  database-integration:
+    name: Isolated MySQL Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4@sha256:c831a0f11348d402b43d77453e17d770be2eef356615a2823fe0f5a0d6c8b9af
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_ROOT_HOST: "%"
+          MYSQL_DATABASE: erp_ci_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      NODE_ENV: test
+      RUN_DB_TESTS: "1"
+      ALLOW_TEST_DB_INIT: "YES"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_NAME: erp_ci_test
+      DB_USER: root
+      DB_PASSWORD: ""
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Initialize isolated test database
+        run: npm run init:test-db
+
+      - name: Verify explicit payroll schema migration is idempotent
+        run: |
+          npm run migrate:payroll-schema
+          npm run migrate:payroll-schema
+
+      - name: Verify explicit system settings migration is idempotent
+        run: |
+          npm run migrate:system-settings
+          npm run migrate:system-settings
+
+      - name: Run database integration tests
+        env:
+          ALLOW_TEST_DB_INIT: "NO"
+        run: npm run test:integration:ci
+
+  frontend:
+    name: Frontend Lint + Production Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Production dependency audit (high+)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Frontend toolchain dependency audit (moderate+)
+        run: npm audit --audit-level=moderate
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Build
+        env:
+          VITE_MAIN_SYSTEM_URL: https://main-ci.test
+        run: npm run build
+
+  delivery-safety:
+    name: Delivery Safety Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changed-file whitespace
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]]; then
+            git diff --check "$BASE_SHA" "$HEAD_SHA"
+          else
+            git diff-tree --check --root --no-commit-id -r "$HEAD_SHA"
+          fi
+
+      - name: Validate deployment shell syntax
+        shell: bash
+        run: |
+          bash -n deploy/deploy.sh \
+            backend/scripts/deploy.sh \
+            backend/scripts/backup-to-cos.sh
+          node --check backend/scripts/run-release-precheck.js
+          node --check backend/scripts/wait-for-ready.js
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Secret and deployment contract gates
+        working-directory: backend
+        run: npm run test:delivery-safety

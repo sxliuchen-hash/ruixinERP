@@ -1,0 +1,2443 @@
+{
+  "schemaVersion": 1,
+  "application": {
+    "code": "erp",
+    "name": "ERP财务管理系统",
+    "version": "1.3.0"
+  },
+  "modules": [
+    {
+      "code": "app",
+      "name": "ERP入口",
+      "permissions": [
+        {
+          "code": "erp.app.view",
+          "name": "进入ERP",
+          "description": "进入ERP",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [],
+          "pages": [
+            "/"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "dashboard",
+      "name": "首页看板",
+      "permissions": [
+        {
+          "code": "erp.dashboard.view",
+          "name": "查看首页看板",
+          "description": "查看首页看板",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/dashboard/overview",
+            "GET /api/v1/dashboard/accounts",
+            "GET /api/v1/dashboard/trend",
+            "GET /api/v1/dashboard/cost-breakdown",
+            "GET /api/v1/dashboard/pending",
+            "GET /api/v1/dashboard/aging"
+          ],
+          "pages": [
+            "/dashboard"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "account",
+      "name": "银行账户",
+      "permissions": [
+        {
+          "code": "erp.account.view",
+          "name": "查看银行账户",
+          "description": "查看银行账户",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/accounts",
+            "GET /api/v1/accounts/:id/flow"
+          ],
+          "pages": [
+            "/accounts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.account.create",
+          "name": "创建银行账户",
+          "description": "创建银行账户",
+          "action": "create",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/accounts"
+          ],
+          "pages": [
+            "/accounts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.account.update",
+          "name": "编辑银行账户",
+          "description": "编辑银行账户",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/accounts/:id"
+          ],
+          "pages": [
+            "/accounts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.account.adjust",
+          "name": "调整账户余额",
+          "description": "调整账户余额",
+          "action": "adjust",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "PUT /api/v1/accounts/:id/balance"
+          ],
+          "pages": [
+            "/accounts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.account.transfer",
+          "name": "账户间转账",
+          "description": "账户间转账",
+          "action": "transfer",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/accounts/transfer"
+          ],
+          "pages": [
+            "/accounts"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "customer",
+      "name": "客户管理",
+      "permissions": [
+        {
+          "code": "erp.customer.view",
+          "name": "查看客户",
+          "description": "查看客户",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/customers",
+            "GET /api/v1/customers/:id",
+            "GET /api/v1/customers/:id/transactions"
+          ],
+          "pages": [
+            "/customers"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.customer.create",
+          "name": "创建客户",
+          "description": "创建客户",
+          "action": "create",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/customers"
+          ],
+          "pages": [
+            "/customers"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.customer.update",
+          "name": "编辑客户",
+          "description": "编辑客户",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/customers/:id"
+          ],
+          "pages": [
+            "/customers"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.customer.delete",
+          "name": "删除客户",
+          "description": "删除客户",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/customers/:id"
+          ],
+          "pages": [
+            "/customers"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "supplier",
+      "name": "供应商管理",
+      "permissions": [
+        {
+          "code": "erp.supplier.view",
+          "name": "查看供应商",
+          "description": "查看供应商",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/suppliers",
+            "GET /api/v1/suppliers/:id",
+            "GET /api/v1/suppliers/:id/transactions"
+          ],
+          "pages": [
+            "/suppliers"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.supplier.create",
+          "name": "创建供应商",
+          "description": "创建供应商",
+          "action": "create",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/suppliers"
+          ],
+          "pages": [
+            "/suppliers"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.supplier.update",
+          "name": "编辑供应商",
+          "description": "编辑供应商",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/suppliers/:id"
+          ],
+          "pages": [
+            "/suppliers"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.supplier.delete",
+          "name": "删除供应商",
+          "description": "删除供应商",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/suppliers/:id"
+          ],
+          "pages": [
+            "/suppliers"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "contract",
+      "name": "合同管理",
+      "permissions": [
+        {
+          "code": "erp.contract.view",
+          "name": "查看合同",
+          "description": "查看合同",
+          "action": "view",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/contracts",
+            "GET /api/v1/contracts/:id"
+          ],
+          "pages": [
+            "/contracts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.contract.create",
+          "name": "创建合同",
+          "description": "创建合同",
+          "action": "create",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/contracts"
+          ],
+          "pages": [
+            "/contracts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.contract.update",
+          "name": "编辑合同",
+          "description": "编辑合同",
+          "action": "update",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/contracts/:id",
+            "PUT /api/v1/contracts/:id/status"
+          ],
+          "pages": [
+            "/contracts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.contract.delete",
+          "name": "删除合同",
+          "description": "删除合同",
+          "action": "delete",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/contracts/:id"
+          ],
+          "pages": [
+            "/contracts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.contract.confirm",
+          "name": "确认合同",
+          "description": "确认合同",
+          "action": "confirm",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/contracts/:id/confirm"
+          ],
+          "pages": [
+            "/contracts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.contract.upload",
+          "name": "上传合同附件",
+          "description": "上传合同附件",
+          "action": "upload",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/contracts/:id/attachment"
+          ],
+          "pages": [
+            "/contracts"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.contract.export",
+          "name": "导出合同",
+          "description": "导出合同数据，数据范围与合同查看权限取交集",
+          "action": "export",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/contracts"
+          ],
+          "pages": [
+            "/contracts"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "invoice",
+      "name": "发票管理",
+      "permissions": [
+        {
+          "code": "erp.invoice.view",
+          "name": "查看发票",
+          "description": "查看发票",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/invoices",
+            "GET /api/v1/invoices/:id"
+          ],
+          "pages": [
+            "/invoices"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.invoice.create",
+          "name": "创建发票",
+          "description": "创建发票",
+          "action": "create",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/invoices"
+          ],
+          "pages": [
+            "/invoices"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.invoice.update",
+          "name": "编辑发票",
+          "description": "编辑发票",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/invoices/:id"
+          ],
+          "pages": [
+            "/invoices"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.invoice.delete",
+          "name": "删除发票",
+          "description": "删除发票",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/invoices/:id"
+          ],
+          "pages": [
+            "/invoices"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.invoice.confirm",
+          "name": "确认发票",
+          "description": "确认发票",
+          "action": "confirm",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/invoices/:id/status"
+          ],
+          "pages": [
+            "/invoices"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.invoice.export",
+          "name": "导出发票",
+          "description": "导出公司级发票数据",
+          "action": "export",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/invoices"
+          ],
+          "pages": [
+            "/invoices"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "payment",
+      "name": "收付款",
+      "permissions": [
+        {
+          "code": "erp.payment.view",
+          "name": "查看收付款",
+          "description": "查看收付款",
+          "action": "view",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/payments",
+            "GET /api/v1/payments/:id",
+            "GET /api/v1/payments/receivable",
+            "GET /api/v1/payments/payable"
+          ],
+          "pages": [
+            "/payments"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payment.create",
+          "name": "创建收付款",
+          "description": "创建收付款",
+          "action": "create",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/payments"
+          ],
+          "pages": [
+            "/payments"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payment.update",
+          "name": "编辑收付款",
+          "description": "编辑收付款",
+          "action": "update",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/payments/:id"
+          ],
+          "pages": [
+            "/payments"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payment.delete",
+          "name": "删除收付款",
+          "description": "删除收付款",
+          "action": "delete",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/payments/:id"
+          ],
+          "pages": [
+            "/payments"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payment.confirm",
+          "name": "确认收付款",
+          "description": "确认收付款",
+          "action": "confirm",
+          "scopes": [
+            "team",
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "PUT /api/v1/payments/:id/confirm"
+          ],
+          "pages": [
+            "/payments"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payment.export",
+          "name": "导出收付款",
+          "description": "导出收付款数据，数据范围与收付款查看权限取交集",
+          "action": "export",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/payments"
+          ],
+          "pages": [
+            "/payments"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "expense",
+      "name": "报销",
+      "permissions": [
+        {
+          "code": "erp.expense.view",
+          "name": "查看报销",
+          "description": "查看报销",
+          "action": "view",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/expenses",
+            "GET /api/v1/expenses/:id",
+            "GET /api/v1/expenses/summary/category",
+            "GET /api/v1/expenses/summary/user",
+            "GET /api/v1/expenses/summary/monthly"
+          ],
+          "pages": [
+            "/expenses"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.expense.create",
+          "name": "创建报销",
+          "description": "创建报销",
+          "action": "create",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/expenses"
+          ],
+          "pages": [
+            "/expenses"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.expense.update",
+          "name": "编辑报销",
+          "description": "编辑报销",
+          "action": "update",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/expenses/:id"
+          ],
+          "pages": [
+            "/expenses"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.expense.delete",
+          "name": "删除报销",
+          "description": "删除报销",
+          "action": "delete",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/expenses/:id"
+          ],
+          "pages": [
+            "/expenses"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.expense.approve",
+          "name": "审批报销",
+          "description": "审批报销",
+          "action": "approve",
+          "scopes": [
+            "team",
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "PUT /api/v1/expenses/:id/confirm"
+          ],
+          "pages": [
+            "/expenses"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.expense.export",
+          "name": "导出报销",
+          "description": "导出报销数据，数据范围与报销查看权限取交集",
+          "action": "export",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/expenses"
+          ],
+          "pages": [
+            "/expenses"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "loan",
+      "name": "借款",
+      "permissions": [
+        {
+          "code": "erp.loan.view",
+          "name": "查看借款",
+          "description": "查看借款",
+          "action": "view",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/loans",
+            "GET /api/v1/loans/:id",
+            "GET /api/v1/loans/summary"
+          ],
+          "pages": [
+            "/loans"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.loan.create",
+          "name": "创建借款",
+          "description": "创建借款",
+          "action": "create",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/loans"
+          ],
+          "pages": [
+            "/loans"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.loan.update",
+          "name": "编辑借款",
+          "description": "编辑借款",
+          "action": "update",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/loans/:id"
+          ],
+          "pages": [
+            "/loans"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.loan.delete",
+          "name": "删除借款",
+          "description": "删除借款",
+          "action": "delete",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/loans/:id"
+          ],
+          "pages": [
+            "/loans"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.loan.repay",
+          "name": "登记还款",
+          "description": "登记还款",
+          "action": "repay",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/loans/:id/repayments",
+            "DELETE /api/v1/loans/:id/repayments/:repaymentId"
+          ],
+          "pages": [
+            "/loans"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "inventory",
+      "name": "专利库存",
+      "permissions": [
+        {
+          "code": "erp.inventory.view",
+          "name": "查看专利库存",
+          "description": "查看专利库存",
+          "action": "view",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/inventory",
+            "GET /api/v1/inventory/:id",
+            "GET /api/v1/inventory/overview",
+            "GET /api/v1/inventory/expiring",
+            "GET /api/v1/inventory/sold",
+            "GET /api/v1/inventory/sold/stats",
+            "GET /api/v1/inventory/sold/analytics"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.create",
+          "name": "创建专利库存",
+          "description": "创建专利库存",
+          "action": "create",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/inventory"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.update",
+          "name": "编辑专利库存",
+          "description": "编辑专利库存",
+          "action": "update",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/inventory/:id",
+            "PUT /api/v1/inventory/:id/status",
+            "PUT /api/v1/inventory/:id/price",
+            "PUT /api/v1/inventory/batch-price",
+            "POST /api/v1/inventory/:id/fees",
+            "DELETE /api/v1/inventory/:id/fees/:feeId"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.delete",
+          "name": "删除专利库存",
+          "description": "删除专利库存",
+          "action": "delete",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/inventory/:id"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.import",
+          "name": "批量导入专利库存",
+          "description": "批量导入专利库存",
+          "action": "import",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/inventory/batch-import/template",
+            "POST /api/v1/inventory/batch-import/validate",
+            "POST /api/v1/inventory/batch-import/execute"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.batch_delete",
+          "name": "批量删除专利库存",
+          "description": "批量删除专利库存",
+          "action": "batch_delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/inventory/batch-delete"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.sell",
+          "name": "标记专利售出",
+          "description": "标记专利售出",
+          "action": "sell",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/inventory/:id/sell"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.sync",
+          "name": "同步专利数据",
+          "description": "同步专利数据",
+          "action": "sync",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/inventory/:id/sync-from-ip"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.unsell",
+          "name": "撤销专利售出",
+          "description": "撤销专利售出",
+          "action": "unsell",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/inventory/:id/unsell"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory.export",
+          "name": "导出专利库存",
+          "description": "导出专利库存数据，数据范围与库存查看权限取交集",
+          "action": "export",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/inventory"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "inventory_anomaly",
+      "name": "专利异常告警",
+      "permissions": [
+        {
+          "code": "erp.inventory_anomaly.view",
+          "name": "查看专利异常告警",
+          "description": "查看专利异常告警",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/inventory/anomalies",
+            "GET /api/v1/inventory/anomalies/overview",
+            "GET /api/v1/inventory/anomalies/scan-progress"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory_anomaly.resolve",
+          "name": "处理专利异常告警",
+          "description": "处理专利异常告警",
+          "action": "resolve",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "PUT /api/v1/inventory/anomalies/:id/resolve"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.inventory_anomaly.scan",
+          "name": "执行专利异常扫描",
+          "description": "执行专利异常扫描",
+          "action": "scan",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/inventory/anomalies/scan",
+            "POST /api/v1/inventory/anomalies/scan-stop"
+          ],
+          "pages": [
+            "/inventory"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "project",
+      "name": "交易项目",
+      "permissions": [
+        {
+          "code": "erp.project.view",
+          "name": "查看交易项目",
+          "description": "查看交易项目",
+          "action": "view",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/projects",
+            "GET /api/v1/projects/:id",
+            "GET /api/v1/projects/:id/profit",
+            "GET /api/v1/projects/summary"
+          ],
+          "pages": [
+            "/projects"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.project.create",
+          "name": "创建交易项目",
+          "description": "创建交易项目",
+          "action": "create",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/projects"
+          ],
+          "pages": [
+            "/projects"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.project.update",
+          "name": "编辑交易项目",
+          "description": "编辑交易项目",
+          "action": "update",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/projects/:id",
+            "PUT /api/v1/projects/:id/status"
+          ],
+          "pages": [
+            "/projects"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.project.delete",
+          "name": "删除交易项目",
+          "description": "删除交易项目",
+          "action": "delete",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/projects/:id"
+          ],
+          "pages": [
+            "/projects"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.project.refresh",
+          "name": "刷新项目数据",
+          "description": "刷新项目数据",
+          "action": "refresh",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/projects/:id/refresh"
+          ],
+          "pages": [
+            "/projects"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.project.export",
+          "name": "导出交易项目",
+          "description": "导出交易项目数据，数据范围与项目查看权限取交集",
+          "action": "export",
+          "scopes": [
+            "self",
+            "team",
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/projects"
+          ],
+          "pages": [
+            "/projects"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "cost",
+      "name": "成本",
+      "permissions": [
+        {
+          "code": "erp.cost.view",
+          "name": "查看成本",
+          "description": "查看成本",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/costs/categories/tree",
+            "GET /api/v1/costs/categories",
+            "GET /api/v1/costs/summary/monthly",
+            "GET /api/v1/costs/summary/type",
+            "GET /api/v1/costs/summary/category",
+            "GET /api/v1/costs/summary/yoy-mom",
+            "GET /api/v1/costs/records"
+          ],
+          "pages": [
+            "/costs"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.cost.create",
+          "name": "创建成本",
+          "description": "创建成本",
+          "action": "create",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/costs/categories",
+            "POST /api/v1/costs/records"
+          ],
+          "pages": [
+            "/costs"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.cost.update",
+          "name": "编辑成本",
+          "description": "编辑成本",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/costs/categories/:id",
+            "PUT /api/v1/costs/records/:id"
+          ],
+          "pages": [
+            "/costs"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.cost.delete",
+          "name": "删除成本",
+          "description": "删除成本",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/costs/categories/:id",
+            "DELETE /api/v1/costs/records/:id"
+          ],
+          "pages": [
+            "/costs"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.cost.generate",
+          "name": "生成周期成本",
+          "description": "生成周期成本",
+          "action": "generate",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/costs/recurring/generate"
+          ],
+          "pages": [
+            "/costs"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.cost.export",
+          "name": "导出成本",
+          "description": "导出公司级成本数据",
+          "action": "export",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/costs"
+          ],
+          "pages": [
+            "/costs"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "reconciliation",
+      "name": "银行对账",
+      "permissions": [
+        {
+          "code": "erp.reconciliation.view",
+          "name": "查看银行对账",
+          "description": "查看银行对账",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/reconciliation/history",
+            "GET /api/v1/reconciliation/result/:batchNo"
+          ],
+          "pages": [
+            "/reconciliation"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.reconciliation.import",
+          "name": "导入银行流水",
+          "description": "导入银行流水",
+          "action": "import",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/reconciliation/upload"
+          ],
+          "pages": [
+            "/reconciliation"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.reconciliation.match",
+          "name": "匹配银行流水",
+          "description": "匹配银行流水",
+          "action": "match",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/reconciliation/statements/:id/create-payment",
+            "PUT /api/v1/reconciliation/statements/:id/match",
+            "PUT /api/v1/reconciliation/statements/:id/ignore"
+          ],
+          "pages": [
+            "/reconciliation"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.reconciliation.unmatch",
+          "name": "取消银行流水匹配",
+          "description": "取消银行流水匹配",
+          "action": "unmatch",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/reconciliation/statements/:id/unmatch"
+          ],
+          "pages": [
+            "/reconciliation"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.reconciliation.delete",
+          "name": "删除对账批次",
+          "description": "删除对账批次",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/reconciliation/batch/:batchNo"
+          ],
+          "pages": [
+            "/reconciliation"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "import",
+      "name": "历史数据导入",
+      "permissions": [
+        {
+          "code": "erp.import.view",
+          "name": "下载导入模板",
+          "description": "下载导入模板",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/import/template/:type"
+          ],
+          "pages": [
+            "/import"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.import.validate",
+          "name": "校验导入数据",
+          "description": "校验导入数据",
+          "action": "validate",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/import/validate/:type"
+          ],
+          "pages": [
+            "/import"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.import.execute",
+          "name": "执行历史数据导入",
+          "description": "执行历史数据导入",
+          "action": "execute",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/import/execute/:type"
+          ],
+          "pages": [
+            "/import"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "export",
+      "name": "数据导出",
+      "permissions": [
+        {
+          "code": "erp.export.export",
+          "name": "导出ERP数据",
+          "description": "导出ERP数据",
+          "action": "export",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [],
+          "pages": [],
+          "deprecated": true
+        }
+      ]
+    },
+    {
+      "code": "audit",
+      "name": "操作日志",
+      "permissions": [
+        {
+          "code": "erp.audit.view",
+          "name": "查看操作日志",
+          "description": "查看操作日志",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/logs"
+          ],
+          "pages": [
+            "/logs"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "wechat",
+      "name": "企业微信",
+      "permissions": [
+        {
+          "code": "erp.wechat.view",
+          "name": "查看企业微信配置",
+          "description": "查看企业微信配置",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/wechat/config"
+          ],
+          "pages": [
+            "/wechat"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.wechat.configure",
+          "name": "诊断企业微信配置",
+          "description": "诊断企业微信配置",
+          "action": "configure",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/wechat/test-token",
+            "GET /api/v1/wechat/users/:userId"
+          ],
+          "pages": [
+            "/wechat"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.wechat.sync",
+          "name": "手动同步企业微信",
+          "description": "手动同步企业微信",
+          "action": "sync",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/wechat/sync"
+          ],
+          "pages": [
+            "/wechat"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "employee",
+      "name": "员工档案",
+      "permissions": [
+        {
+          "code": "erp.employee.view",
+          "name": "查看员工档案",
+          "description": "查看员工档案",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/employees",
+            "GET /api/v1/employees/:id"
+          ],
+          "pages": [
+            "/employees"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.employee.create",
+          "name": "创建员工档案",
+          "description": "创建员工档案",
+          "action": "create",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/employees"
+          ],
+          "pages": [
+            "/employees"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.employee.update",
+          "name": "编辑员工档案",
+          "description": "编辑员工档案",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/employees/:id"
+          ],
+          "pages": [
+            "/employees"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.employee.delete",
+          "name": "删除员工档案",
+          "description": "删除员工档案",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/employees/:id"
+          ],
+          "pages": [
+            "/employees"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.employee.change_status",
+          "name": "变更员工状态或职级",
+          "description": "变更员工状态或职级",
+          "action": "change_status",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/employees/:id/grade",
+            "PUT /api/v1/employees/:id/status"
+          ],
+          "pages": [
+            "/employees"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "performance",
+      "name": "业绩统计",
+      "permissions": [
+        {
+          "code": "erp.performance.view",
+          "name": "查看业绩统计",
+          "description": "查看业绩统计",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/performance/overview",
+            "GET /api/v1/performance/ranking",
+            "GET /api/v1/performance/trend",
+            "GET /api/v1/performance/quarterly",
+            "GET /api/v1/performance/commission"
+          ],
+          "pages": [
+            "/performance"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.performance.export",
+          "name": "导出业绩统计",
+          "description": "导出业绩统计（当前版本尚无独立接口）",
+          "action": "export",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [],
+          "pages": [
+            "/performance"
+          ],
+          "deprecated": true
+        }
+      ]
+    },
+    {
+      "code": "purchase_commission",
+      "name": "采购提成",
+      "permissions": [
+        {
+          "code": "erp.purchase_commission.view",
+          "name": "查看采购提成",
+          "description": "查看采购提成",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/performance/purchase-commission"
+          ],
+          "pages": [
+            "/purchase-commission"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "performance_import",
+      "name": "业绩上传",
+      "permissions": [
+        {
+          "code": "erp.performance_import.view",
+          "name": "查看业绩导入批次",
+          "description": "查看业绩导入批次",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/performance-import/template",
+            "GET /api/v1/performance-import/batches",
+            "GET /api/v1/performance-import/batches/:id"
+          ],
+          "pages": [
+            "/performance-import"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.performance_import.import",
+          "name": "导入业绩数据",
+          "description": "导入业绩数据",
+          "action": "import",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/performance-import/validate",
+            "POST /api/v1/performance-import/confirm"
+          ],
+          "pages": [
+            "/performance-import"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.performance_import.delete",
+          "name": "删除业绩导入批次",
+          "description": "删除业绩导入批次",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/performance-import/batches/:id"
+          ],
+          "pages": [
+            "/performance-import"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "salary_rule",
+      "name": "薪资规则",
+      "permissions": [
+        {
+          "code": "erp.salary_rule.view",
+          "name": "查看薪资规则",
+          "description": "查看薪资规则",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/salary-rules",
+            "GET /api/v1/salary-rules/:type"
+          ],
+          "pages": [
+            "/salary-rules"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.salary_rule.update",
+          "name": "编辑薪资规则",
+          "description": "编辑薪资规则",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/salary-rules/init",
+            "PUT /api/v1/salary-rules/:type"
+          ],
+          "pages": [
+            "/salary-rules"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.salary_rule.reset",
+          "name": "重置薪资规则",
+          "description": "重置薪资规则",
+          "action": "reset",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/salary-rules/:type/reset"
+          ],
+          "pages": [
+            "/salary-rules"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "payroll",
+      "name": "工资条",
+      "permissions": [
+        {
+          "code": "erp.payroll.view",
+          "name": "查看工资条",
+          "description": "查看工资条",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/payroll",
+            "GET /api/v1/payroll/summary"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payroll.generate",
+          "name": "生成工资条",
+          "description": "生成工资条",
+          "action": "generate",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/payroll/generate"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payroll.update",
+          "name": "编辑工资条",
+          "description": "编辑工资条",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "PUT /api/v1/payroll/:id",
+            "POST /api/v1/payroll/:id/recalculate",
+            "POST /api/v1/payroll/adjustment"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payroll.confirm",
+          "name": "确认工资条",
+          "description": "确认工资条",
+          "action": "confirm",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/payroll/:id/confirm",
+            "POST /api/v1/payroll/confirm-batch"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payroll.pay",
+          "name": "标记工资发放",
+          "description": "标记工资发放",
+          "action": "pay",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/payroll/:id/paid"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payroll.void",
+          "name": "作废工资条",
+          "description": "作废工资条",
+          "action": "void",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/payroll/:id/void"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payroll.delete",
+          "name": "删除工资条",
+          "description": "删除工资条",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/payroll/:id"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.payroll.export",
+          "name": "导出工资条",
+          "description": "导出公司级工资条明细，必须同时具备工资查看权限",
+          "action": "export",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "GET /api/v1/export/payroll"
+          ],
+          "pages": [
+            "/payroll"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "patent_fee",
+      "name": "年费查询",
+      "permissions": [
+        {
+          "code": "erp.patent_fee.view",
+          "name": "查看专利年费",
+          "description": "查看专利年费",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/patent-fee/list",
+            "GET /api/v1/patent-fee/dashboard",
+            "GET /api/v1/patent-fee/detail/:patentNo",
+            "GET /api/v1/patent-fee/info/:patentNo"
+          ],
+          "pages": [
+            "/patent-fee"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "system",
+      "name": "系统设置",
+      "permissions": [
+        {
+          "code": "erp.system.view",
+          "name": "查看系统设置",
+          "description": "查看系统设置",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/system-settings",
+            "GET /api/v1/system-settings/:key"
+          ],
+          "pages": [
+            "/system-settings"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.system.update",
+          "name": "修改系统设置",
+          "description": "修改系统设置",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/system-settings/:key"
+          ],
+          "pages": [
+            "/system-settings"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.system.delete",
+          "name": "删除系统设置",
+          "description": "删除系统设置",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/system-settings/:key"
+          ],
+          "pages": [
+            "/system-settings"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "classify_rule",
+      "name": "自动归类规则",
+      "permissions": [
+        {
+          "code": "erp.classify_rule.view",
+          "name": "查看归类规则",
+          "description": "查看归类规则",
+          "action": "view",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/classify-rules"
+          ],
+          "pages": [
+            "/classify-rules"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.classify_rule.create",
+          "name": "创建归类规则",
+          "description": "创建归类规则",
+          "action": "create",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "POST /api/v1/classify-rules"
+          ],
+          "pages": [
+            "/classify-rules"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.classify_rule.update",
+          "name": "编辑归类规则",
+          "description": "编辑归类规则",
+          "action": "update",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/classify-rules/:id"
+          ],
+          "pages": [
+            "/classify-rules"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.classify_rule.delete",
+          "name": "删除归类规则",
+          "description": "删除归类规则",
+          "action": "delete",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "critical",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/classify-rules/:id"
+          ],
+          "pages": [
+            "/classify-rules"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "notification",
+      "name": "通知",
+      "permissions": [
+        {
+          "code": "erp.notification.view",
+          "name": "查看通知",
+          "description": "查看通知",
+          "action": "view",
+          "scopes": [
+            "self",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "GET /api/v1/notifications",
+            "GET /api/v1/notifications/unread-count"
+          ],
+          "pages": [
+            "/notifications"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.notification.update",
+          "name": "更新通知状态",
+          "description": "更新通知状态",
+          "action": "update",
+          "scopes": [
+            "self",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "PUT /api/v1/notifications/read-all",
+            "PUT /api/v1/notifications/:id/read"
+          ],
+          "pages": [
+            "/notifications"
+          ],
+          "deprecated": false
+        },
+        {
+          "code": "erp.notification.delete",
+          "name": "删除通知",
+          "description": "删除通知",
+          "action": "delete",
+          "scopes": [
+            "self",
+            "all"
+          ],
+          "riskLevel": "normal",
+          "sensitive": false,
+          "routes": [
+            "DELETE /api/v1/notifications/:id"
+          ],
+          "pages": [
+            "/notifications"
+          ],
+          "deprecated": false
+        }
+      ]
+    },
+    {
+      "code": "file",
+      "name": "文件",
+      "permissions": [
+        {
+          "code": "erp.file.download",
+          "name": "下载ERP文件",
+          "description": "下载ERP文件",
+          "action": "download",
+          "scopes": [
+            "all"
+          ],
+          "riskLevel": "high",
+          "sensitive": true,
+          "routes": [
+            "POST /api/v1/files/ticket",
+            "GET /api/v1/files/download"
+          ],
+          "pages": [
+            "/files"
+          ],
+          "deprecated": false
+        }
+      ]
+    }
+  ]
+}

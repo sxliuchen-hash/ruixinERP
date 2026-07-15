@@ -32,31 +32,31 @@
         </h3>
       </div>
       <div class="header-actions" v-if="detail">
-        <el-button type="primary" :loading="ipFeeLoading" @click="fetchIpFeeDetail">
+        <el-button v-if="can(PERMISSIONS.PATENT_FEE_VIEW)" type="primary" :loading="ipFeeLoading" @click="fetchIpFeeDetail">
           <el-icon><Refresh /></el-icon>更新年费
         </el-button>
-        <el-button type="primary" plain :loading="syncLoading" @click="handleSyncFromIp">
+        <el-button v-if="can(PERMISSIONS.INVENTORY_SYNC)" type="primary" plain :loading="syncLoading" @click="handleSyncFromIp">
           <el-icon><Connection /></el-icon>同步专利信息
         </el-button>
-        <el-button type="success" @click="openPriceDialog">
+        <el-button v-if="can(PERMISSIONS.INVENTORY_UPDATE)" type="success" @click="openPriceDialog">
           <el-icon><Money /></el-icon>调价
         </el-button>
-        <el-dropdown trigger="click" @command="handleStatusCommand">
+        <el-dropdown v-if="canAny([PERMISSIONS.INVENTORY_UPDATE, PERMISSIONS.INVENTORY_SELL, PERMISSIONS.INVENTORY_UNSELL])" trigger="click" @command="handleStatusCommand">
           <el-button type="warning">
             变更状态<el-icon><ArrowDown /></el-icon>
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="in_stock" :disabled="detail.status === 'in_stock'">
+              <el-dropdown-item v-if="can(detail.status === 'sold' ? PERMISSIONS.INVENTORY_UNSELL : PERMISSIONS.INVENTORY_UPDATE)" command="in_stock" :disabled="detail.status === 'in_stock'">
                 回库
               </el-dropdown-item>
-              <el-dropdown-item command="sold" :disabled="detail.status === 'sold'">
+              <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_SELL)" command="sold" :disabled="detail.status === 'sold'">
                 标记售出
               </el-dropdown-item>
-              <el-dropdown-item command="transferring" :disabled="detail.status === 'transferring'">
+              <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_UPDATE)" command="transferring" :disabled="detail.status === 'transferring'">
                 转让中
               </el-dropdown-item>
-              <el-dropdown-item command="abandoned" :disabled="detail.status === 'abandoned'">
+              <el-dropdown-item v-if="can(PERMISSIONS.INVENTORY_UPDATE)" command="abandoned" :disabled="detail.status === 'abandoned'">
                 放弃
               </el-dropdown-item>
             </el-dropdown-menu>
@@ -181,7 +181,7 @@
           <template #header>
             <div class="section-header">
               <span>年费/维持成本记录（{{ detail.annualFees?.length || 0 }} 笔）</span>
-              <el-button type="primary" size="small" @click="openFeeDialog">
+              <el-button v-if="can(PERMISSIONS.INVENTORY_UPDATE)" type="primary" size="small" @click="openFeeDialog">
                 <el-icon><Plus /></el-icon>添加年费
               </el-button>
             </div>
@@ -211,7 +211,7 @@
             <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
             <el-table-column label="操作" width="80" align="center">
               <template #default="{ row }">
-                <el-button type="danger" link size="small" @click="handleDeleteFee(row)">删除</el-button>
+                <el-button v-if="can(PERMISSIONS.INVENTORY_UPDATE)" type="danger" link size="small" @click="handleDeleteFee(row)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -265,6 +265,7 @@
               数据更新于：{{ formatDateTime(ipFeeData.patent.lastFeeQueryAt) }}
             </span>
             <el-button
+              v-if="can(PERMISSIONS.PATENT_FEE_VIEW)"
               type="primary"
               size="small"
               :loading="ipFeeLoading"
@@ -278,7 +279,7 @@
 
       <!-- 未加载状态 -->
       <div v-if="!ipFeeLoaded && !ipFeeLoading" class="ip-empty-hint">
-        <el-button type="primary" @click="fetchIpFeeDetail">
+        <el-button v-if="can(PERMISSIONS.PATENT_FEE_VIEW)" type="primary" @click="fetchIpFeeDetail">
           <el-icon><Download /></el-icon>查询国知局年费信息
         </el-button>
         <p class="form-tip">点击按钮从 IP 系统获取该专利的最新年费数据</p>
@@ -559,9 +560,14 @@ import {
 import { getPatentFeeDetail } from '@/api/patentFee'
 import { formatMoney, formatDate } from '@/utils/format'
 import { INVENTORY_STATUS_MAP, FEE_TYPE_MAP, IP_FEE_STATUS_MAP, RESOURCE_TYPE_MAP } from '@/utils/constants'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
+const canAny = (permissionCodes) => userStore.canAny(permissionCodes)
 
 const loading = ref(false)
 const detail = ref(null)

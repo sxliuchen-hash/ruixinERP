@@ -4,7 +4,7 @@
  * ============================================================
  * 路由前缀：/api/v1/dashboard（在 routes/index.js 挂载）
  *
- * 权限：authenticate + requireErpAccess（admin/process/agent 均可访问）
+ * 权限：authenticate + erp.app.view + erp.dashboard.view
  *
  * 所有接口均为 GET，聚合查询，无写操作，无需 operationLog。
  * ============================================================
@@ -14,10 +14,12 @@ const express = require('express');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
 const { authenticate } = require('../middlewares/auth');
-const { requireErpAccess } = require('../middlewares/permission');
+const { requirePermission } = require('../middlewares/requirePermission');
+const { PERMISSIONS } = require('../permissions/permissionCodes');
 
 router.use(authenticate);
-router.use(requireErpAccess());
+router.use(requirePermission(PERMISSIONS.APP_VIEW));
+router.use(requirePermission(PERMISSIONS.DASHBOARD_VIEW));
 
 // 核心指标：现金流/应收应付/毛利润 —— 支持 ?period=month|quarter|year
 router.get('/overview', dashboardController.getOverview);

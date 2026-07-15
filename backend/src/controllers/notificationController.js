@@ -8,12 +8,17 @@
  */
 
 const notificationService = require('../services/notificationService');
+const { getLegacyAuthorizationRole } = require('../permissions/legacyRoleAdapter');
+
+function getLegacyAccessContext(user) {
+  return { userId: user.id, userRole: getLegacyAuthorizationRole(user) };
+}
 
 /** GET /api/v1/notifications */
 async function getList(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const data = await notificationService.getList(req.query, userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await notificationService.getList(req.query, userId, userRole, req.dataFilter);
     res.json({ success: true, data });
   } catch (e) { next(e); }
 }
@@ -21,8 +26,8 @@ async function getList(req, res, next) {
 /** GET /api/v1/notifications/unread-count - 未读数量（用于顶栏红点） */
 async function getUnreadCount(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const count = await notificationService.getUnreadCount(userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const count = await notificationService.getUnreadCount(userId, userRole, req.dataFilter);
     res.json({ success: true, data: { count } });
   } catch (e) { next(e); }
 }
@@ -31,8 +36,10 @@ async function getUnreadCount(req, res, next) {
 async function markRead(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await notificationService.markRead(parseInt(id, 10), userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await notificationService.markRead(
+      parseInt(id, 10), userId, userRole, req.dataFilter
+    );
     res.json({ success: true, data });
   } catch (e) { next(e); }
 }
@@ -40,8 +47,8 @@ async function markRead(req, res, next) {
 /** PUT /api/v1/notifications/read-all */
 async function markAllRead(req, res, next) {
   try {
-    const { id: userId, role: userRole } = req.user;
-    const data = await notificationService.markAllRead(userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await notificationService.markAllRead(userId, userRole, req.dataFilter);
     res.json({ success: true, message: `已标记 ${data.affected} 条为已读`, data });
   } catch (e) { next(e); }
 }
@@ -50,8 +57,10 @@ async function markAllRead(req, res, next) {
 async function remove(req, res, next) {
   try {
     const { id } = req.params;
-    const { id: userId, role: userRole } = req.user;
-    const data = await notificationService.remove(parseInt(id, 10), userId, userRole);
+    const { userId, userRole } = getLegacyAccessContext(req.user);
+    const data = await notificationService.remove(
+      parseInt(id, 10), userId, userRole, req.dataFilter
+    );
     res.json({ success: true, message: '消息已删除', data });
   } catch (e) { next(e); }
 }

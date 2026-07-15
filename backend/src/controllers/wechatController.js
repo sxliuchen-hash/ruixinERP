@@ -119,6 +119,7 @@ async function getConfigStatus(req, res, next) {
   try {
     const base = wechatConfig.isConfigured();
     const callback = wechatConfig.isCallbackConfigured();
+    const templateConfiguration = wechatConfig.resolveTemplateConfiguration();
     res.json({
       success: true,
       data: {
@@ -129,6 +130,11 @@ async function getConfigStatus(req, res, next) {
         callback_ready: callback.ok,
         callback_missing: callback.missing,
         templates: wechatConfig.templates,
+        template_configuration: {
+          active_template_count: Object.keys(templateConfiguration.handlers).length,
+          conflicts: templateConfiguration.duplicates.map((item) => item.types),
+          unsupported_types: templateConfiguration.unsupported.map((item) => item.type)
+        },
         // 不泄漏敏感值
         secret_configured: !!wechatConfig.secret,
         token_configured: !!wechatConfig.token,
@@ -178,12 +184,23 @@ async function getWechatUser(req, res, next) {
 
 /**
  * POST /api/v1/wechat/sync - 手动触发批量同步（admin）
- * Body: { hours: 24 }  回溯小时数，默认 2
+ * Body: { hours: 24 } 批量回溯，或 { spNo: '...' } 精确重放单个审批。
+ * 精确重放用于管理员修复账户/类别映射后，将同一 pending 报销幂等推进为 confirmed。
  */
 async function manualSync(req, res, next) {
   try {
-    const hours = parseInt(req.body?.hours) || 2;
     const wechatSyncService = require('../services/wechat/wechatSyncService');
+    const spNo = typeof req.body?.spNo === 'string' ? req.body.spNo.trim() : '';
+    if (spNo) {
+      const result = await wechatSyncService.syncBySpNo(spNo);
+      return res.json({
+        success: true,
+        message: '指定企微审批已重新同步',
+        data: result
+      });
+    }
+
+    const hours = parseInt(req.body?.hours) || 2;
     const result = await wechatSyncService.batchSync(hours);
     res.json({
       success: true,

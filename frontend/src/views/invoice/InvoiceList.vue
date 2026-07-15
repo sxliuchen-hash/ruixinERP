@@ -31,7 +31,13 @@
           style="width: 200px"
           @update:model-value="handleSearch"
         />
-        <el-button type="primary" @click="handleCreate">
+        <ExportButton
+          path="/export/invoices"
+          :params="exportParams"
+          :permission="PERMISSIONS.INVOICE_EXPORT"
+          label="导出"
+        />
+        <el-button v-if="can(PERMISSIONS.INVOICE_CREATE)" type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建发票
         </el-button>
       </div>
@@ -87,22 +93,22 @@
       </el-table-column>
       <el-table-column label="操作" width="220" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="can(PERMISSIONS.INVOICE_UPDATE)" type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button
-            v-if="row.status === 'pending'"
+            v-if="row.status === 'pending' && can(PERMISSIONS.INVOICE_CONFIRM)"
             type="success"
             link
             size="small"
             @click="handleMarkIssued(row)"
           >开票</el-button>
           <el-button
-            v-if="row.status === 'issued'"
+            v-if="row.status === 'issued' && can(PERMISSIONS.INVOICE_CONFIRM)"
             type="warning"
             link
             size="small"
             @click="handleMarkCancelled(row)"
           >作废</el-button>
-          <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="can(PERMISSIONS.INVOICE_DELETE)" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -225,6 +231,12 @@ import { INVOICE_STATUS_MAP } from '@/utils/constants'
 import ContractSelect from '@/components/business/ContractSelect.vue'
 import CustomerSelect from '@/components/business/CustomerSelect.vue'
 import SupplierSelect from '@/components/business/SupplierSelect.vue'
+import ExportButton from '@/components/common/ExportButton.vue'
+import { useUserStore } from '@/stores/user'
+import { PERMISSIONS } from '@/constants/permissions'
+
+const userStore = useUserStore()
+const can = (permissionCode) => userStore.can(permissionCode)
 
 // 列表相关
 const loading = ref(false)
@@ -234,6 +246,14 @@ const filterType = ref('')
 const filterStatus = ref('')
 const filterContractId = ref(null)
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const exportParams = computed(() => {
+  const params = {}
+  if (searchKeyword.value) params.keyword = searchKeyword.value
+  if (filterType.value) params.type = filterType.value
+  if (filterStatus.value) params.status = filterStatus.value
+  if (filterContractId.value) params.contract_id = filterContractId.value
+  return params
+})
 
 // CRUD 弹窗
 const dialogVisible = ref(false)

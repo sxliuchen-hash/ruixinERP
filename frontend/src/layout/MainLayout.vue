@@ -11,6 +11,7 @@
             class="collapse-btn"
             @click="toggleSidebar"
             :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+            :aria-label="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
           >
             <el-icon :size="20">
               <Fold v-if="!sidebarCollapsed" />
@@ -22,8 +23,10 @@
         <div class="header-right">
           <NotificationBell />
           <span class="username">{{ userStore.userInfo.realName || userStore.userInfo.username }}</span>
-          <el-tag size="small" type="info">{{ roleLabel }}</el-tag>
-          <el-button text @click="handleLogout">退出</el-button>
+          <el-tag v-if="accountRoleLabel" size="small" type="info">{{ accountRoleLabel }}</el-tag>
+          <el-button text :loading="loggingOut" :disabled="loggingOut" @click="handleLogout">
+            退出
+          </el-button>
         </div>
       </el-header>
       <el-main class="main-content">
@@ -39,6 +42,7 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { Fold, Expand } from '@element-plus/icons-vue'
+import { ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import Sidebar from '@/components/layout/Sidebar.vue'
@@ -48,6 +52,7 @@ import Watermark from '@/components/common/Watermark.vue'
 
 const userStore = useUserStore()
 const route = useRoute()
+const loggingOut = ref(false)
 
 // 敏感页面（工资/业绩/薪资规则/员工档案）开启防泄露水印
 const needWatermark = computed(() => route.meta && route.meta.watermark === true)
@@ -67,13 +72,30 @@ function toggleSidebar() {
   localStorage.setItem('erp_sidebar_collapsed', sidebarCollapsed.value ? '1' : '0')
 }
 
-const roleLabel = computed(() => {
-  const map = { admin: '管理员', process: '财务', agent: '业务员' }
+// 仅展示主项目返回的账号身份标签，不参与菜单、路由或操作授权。
+const accountRoleLabel = computed(() => {
+  const map = { admin: '管理员', process: '财务', supervisor: '主管', agent: '业务员' }
   return map[userStore.userInfo.role] || userStore.userInfo.role
 })
 
-function handleLogout() {
-  userStore.logout()
+async function handleLogout() {
+  if (loggingOut.value) return
+  try {
+    await ElMessageBox.confirm(
+      '确定退出当前 ERP 会话吗？',
+      '退出 ERP',
+      { type: 'warning', confirmButtonText: '确定退出', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  loggingOut.value = true
+  try {
+    await userStore.logout()
+  } finally {
+    loggingOut.value = false
+  }
 }
 </script>
 

@@ -27,7 +27,7 @@
  * ============================================================
  */
 
-const { Op, QueryTypes, fn, col, literal } = require('sequelize');
+const { Op, QueryTypes, literal } = require('sequelize');
 const { sequelize } = require('../config/database');
 const PatentInventory = require('../models/PatentInventory');
 const PatentAnnualFee = require('../models/PatentAnnualFee');
@@ -36,6 +36,56 @@ const Supplier = require('../models/Supplier');
 const Contract = require('../models/Contract');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 const { parsePagination } = require('../utils/pagination');
+
+const DENY_DATA_FILTER = Object.freeze({ created_by: -1 });
+
+function normalizeCreatedByFilter(dataFilter, userId, userRole) {
+  if (dataFilter && typeof dataFilter === 'object' && !Array.isArray(dataFilter)) {
+    const keys = Object.keys(dataFilter);
+    if (keys.length === 0) return {};
+    if (keys.length !== 1 || keys[0] !== 'created_by') return { ...DENY_DATA_FILTER };
+
+    const ownerScope = dataFilter.created_by;
+    if (Number.isInteger(Number(ownerScope))) {
+      return { created_by: Number(ownerScope) };
+    }
+    const teamIds = ownerScope && typeof ownerScope === 'object' ? ownerScope[Op.in] : null;
+    if (!Array.isArray(teamIds)) return { ...DENY_DATA_FILTER };
+    const normalizedIds = [...new Set(teamIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0))];
+    return normalizedIds.length > 0
+      ? { created_by: { [Op.in]: normalizedIds } }
+      : { ...DENY_DATA_FILTER };
+  }
+
+  if (userRole === 'agent') return { created_by: Number(userId) };
+  if (userRole === 'admin' || userRole === 'process' || userRole === undefined) return {};
+  return { ...DENY_DATA_FILTER };
+}
+
+function buildCreatedBySqlScope(dataFilter, userId, userRole) {
+  const normalized = normalizeCreatedByFilter(dataFilter, userId, userRole);
+  if (Object.keys(normalized).length === 0) return { clause: '', replacements: {} };
+
+  const ownerScope = normalized.created_by;
+  if (Number.isInteger(Number(ownerScope))) {
+    return {
+      clause: 'AND created_by = :scopeUserId',
+      replacements: { scopeUserId: Number(ownerScope) }
+    };
+  }
+
+  const teamIds = ownerScope?.[Op.in];
+  if (Array.isArray(teamIds) && teamIds.length > 0) {
+    return {
+      clause: 'AND created_by IN (:scopeUserIds)',
+      replacements: { scopeUserIds: teamIds }
+    };
+  }
+
+  return { clause: 'AND created_by = :scopeUserId', replacements: { scopeUserId: -1 } };
+}
 
 class InventoryService {
   /**
@@ -52,18 +102,14 @@ class InventoryService {
    * @param {string} [query.order]       asc | desc（默认 desc）
    * @param {string} [query.keyword]     关键词（patent_no / patent_name / remark）
    */
-  async getList(query, userId, userRole) {
+  async getList(query, userId, userRole, dataFilter) {
     const { page, limit, offset } = parsePagination(query);
     const {
       status, resource_type, agent_id, tech_field, supplier_id, project_id,
       min_age, max_age, sort, order, keyword
     } = query;
 
-    const where = {};
-
-    if (userRole === 'agent') {
-      where.created_by = userId;
-    }
+    const where = normalizeCreatedByFilter(dataFilter, userId, userRole);
 
     // 已售专利归档到独立的"已售统计"页面，主库存列表默认不展示
     // 如果显式传入 status 过滤，则按用户意图返回（兼容旧行为）
@@ -147,8 +193,9 @@ class InventoryService {
   /**
    * 获取库存详情（含年费记录 + 调价历史）
    */
-  async getDetail(id, userId, userRole) {
-    const inv = await PatentInventory.findByPk(id, {
+  async getDetail(id, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id, ...normalizeCreatedByFilter(dataFilter, userId, userRole) },
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
         { model: Supplier, as: 'agent', attributes: ['id', 'name'] },
@@ -171,11 +218,6 @@ class InventoryService {
     if (!inv) {
       throw new NotFoundError('库存记录不存在');
     }
-    // 数据隔离：agent 仅能查看自己创建的记录
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new NotFoundError('库存记录不存在');
-    }
-
     const result = this._attachDerivedFields(inv);
     return await this._attachChannelCosts(result);
   }
@@ -226,13 +268,11 @@ class InventoryService {
   /**
    * 更新库存基本信息（不允许直接改 current_price 和 total_maintain_cost）
    */
-  async update(id, data, userId, userRole) {
-    const inv = await PatentInventory.findByPk(id);
+  async update(id, data, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权编辑该库存记录');
-    }
 
     // 剥离系统管控字段，强制走专用接口维护
     const safeData = { ...data };
@@ -258,17 +298,15 @@ class InventoryService {
    *   - 改为 sold：自动填 stock_out_date（如果前端未指定）
    *   - 改为 in_stock（回库）：清空 stock_out_date
    */
-  async changeStatus(id, status, stockOutDate, userId, userRole) {
+  async changeStatus(id, status, stockOutDate, userId, userRole, dataFilter) {
     if (!['in_stock', 'sold', 'abandoned', 'transferring'].includes(status)) {
       throw new ValidationError('状态值非法');
     }
 
-    const inv = await PatentInventory.findByPk(id);
+    const inv = await PatentInventory.findOne({
+      where: { id, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权变更该库存状态');
-    }
 
     const update = { status };
     if (status === 'sold') {
@@ -290,11 +328,7 @@ class InventoryService {
    * @param {string} userRole - 必须是 admin
    * @returns {Promise<{deleted: number, failed: Array}>}
    */
-  async batchDelete(ids, userId, userRole) {
-    if (userRole !== 'admin') {
-      throw new ValidationError('仅管理员可执行批量删除');
-    }
-
+  async batchDelete(ids, userId, userRole, dataFilter) {
     if (!Array.isArray(ids) || ids.length === 0) {
       throw new ValidationError('请选择要删除的记录');
     }
@@ -310,7 +344,10 @@ class InventoryService {
 
     // 查询实际存在的记录
     const existing = await PatentInventory.findAll({
-      where: { id: { [Op.in]: idList } },
+      where: {
+        id: { [Op.in]: idList },
+        ...normalizeCreatedByFilter(dataFilter, userId, userRole)
+      },
       attributes: ['id', 'patent_no']
     });
 
@@ -350,13 +387,11 @@ class InventoryService {
    * 注意：若存在关联的 Payment / Project 等，删除会留下悬空外键，
    * 这里不做强校验（按低优保留），可作为技术债后续完善。
    */
-  async delete(id, userId, userRole) {
-    const inv = await PatentInventory.findByPk(id);
+  async delete(id, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权删除该库存记录');
-    }
 
     await sequelize.transaction(async (t) => {
       await PatentAnnualFee.destroy({ where: { inventory_id: id }, transaction: t });
@@ -374,13 +409,11 @@ class InventoryService {
    * @param {{new_price, change_date?, reason?}} data
    * @param {number} userId
    */
-  async changePrice(id, data, userId, userRole) {
-    const inv = await PatentInventory.findByPk(id);
+  async changePrice(id, data, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权对该库存调价');
-    }
 
     const newPrice = parseFloat(data.new_price);
     if (!(newPrice >= 0)) {
@@ -430,7 +463,7 @@ class InventoryService {
    * @param {string} userRole
    * @returns {Promise<{affected: number, details: Array}>}
    */
-  async batchChangePrice(data, userId, userRole) {
+  async batchChangePrice(data, userId, userRole, dataFilter) {
     const { mode, ids, tech_field, status, reason } = data;
     if (!['fixed', 'percent'].includes(mode)) {
       throw new ValidationError('batch mode 必须为 fixed 或 percent');
@@ -444,8 +477,7 @@ class InventoryService {
       if (p < -100) throw new ValidationError('percent 不能小于 -100');
     }
 
-    const where = {};
-    if (userRole === 'agent') where.created_by = userId;
+    const where = normalizeCreatedByFilter(dataFilter, userId, userRole);
     if (Array.isArray(ids) && ids.length > 0) where.id = { [Op.in]: ids };
     if (tech_field) where.tech_field = { [Op.like]: `%${tech_field}%` };
     if (status) where.status = status;
@@ -499,13 +531,11 @@ class InventoryService {
    * @param {number} inventoryId
    * @param {{fee_type?, amount, fee_date, deadline_date?, payment_id?, remark?}} data
    */
-  async addAnnualFee(inventoryId, data, userId, userRole) {
-    const inv = await PatentInventory.findByPk(inventoryId);
+  async addAnnualFee(inventoryId, data, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id: inventoryId, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权对该库存添加年费');
-    }
 
     if (!data.amount || parseFloat(data.amount) <= 0) {
       throw new ValidationError('金额必须大于0');
@@ -537,13 +567,11 @@ class InventoryService {
   /**
    * 删除年费记录（事务内回算）
    */
-  async deleteAnnualFee(inventoryId, feeId, userId, userRole) {
-    const inv = await PatentInventory.findByPk(inventoryId);
+  async deleteAnnualFee(inventoryId, feeId, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id: inventoryId, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权删除该年费记录');
-    }
 
     const fee = await PatentAnnualFee.findOne({
       where: { id: feeId, inventory_id: inventoryId }
@@ -571,13 +599,11 @@ class InventoryService {
    * @param {number} userId
    * @param {string} userRole
    */
-  async syncFromIpSystem(inventoryId, ipData, userId, userRole) {
-    const inv = await PatentInventory.findByPk(inventoryId);
+  async syncFromIpSystem(inventoryId, ipData, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id: inventoryId, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权同步该库存数据');
-    }
 
     if (!ipData || !ipData.patent) {
       throw new ValidationError('IP 系统数据格式异常');
@@ -635,11 +661,15 @@ class InventoryService {
    *   - estimate_profit 估算利润（在库 current_price - 在库 purchase_price - 在库 total_maintain_cost）
    *   - avg_stock_age   在库专利平均库龄（天）
    */
-  async getOverview() {
+  async getOverview(dataFilter, userId, userRole) {
+    const scope = buildCreatedBySqlScope(dataFilter, userId, userRole);
     // 各状态数量
     const statusRows = await sequelize.query(
-      `SELECT status, COUNT(*) AS count FROM patent_inventory GROUP BY status`,
-      { type: QueryTypes.SELECT }
+      `SELECT status, COUNT(*) AS count
+       FROM patent_inventory
+       WHERE 1=1 ${scope.clause}
+       GROUP BY status`,
+      { replacements: scope.replacements, type: QueryTypes.SELECT }
     );
     const byStatus = { in_stock: 0, sold: 0, abandoned: 0, transferring: 0 };
     statusRows.forEach(r => { if (byStatus[r.status] !== undefined) byStatus[r.status] = parseInt(r.count, 10); });
@@ -650,8 +680,9 @@ class InventoryService {
          COUNT(*) AS total_count,
          COALESCE(SUM(purchase_price), 0) AS total_purchase,
          COALESCE(SUM(total_maintain_cost), 0) AS total_maintain
-       FROM patent_inventory`,
-      { type: QueryTypes.SELECT }
+       FROM patent_inventory
+       WHERE 1=1 ${scope.clause}`,
+      { replacements: scope.replacements, type: QueryTypes.SELECT }
     );
 
     // 在库专利的统计
@@ -662,8 +693,8 @@ class InventoryService {
          COALESCE(SUM(current_price - purchase_price - total_maintain_cost), 0) AS estimate_profit,
          COALESCE(AVG(DATEDIFF(NOW(), stock_in_date)), 0) AS avg_age
        FROM patent_inventory
-       WHERE status = 'in_stock' AND stock_in_date IS NOT NULL`,
-      { type: QueryTypes.SELECT }
+       WHERE status = 'in_stock' AND stock_in_date IS NOT NULL ${scope.clause}`,
+      { replacements: scope.replacements, type: QueryTypes.SELECT }
     );
 
     return {
@@ -685,8 +716,9 @@ class InventoryService {
    * @param {number} [query.days=60] 未来多少天内到期
    * @returns {Promise<Array>}
    */
-  async getExpiring(query) {
+  async getExpiring(query, dataFilter, userId, userRole) {
     const days = parseInt(query?.days, 10) || 60;
+    const scope = buildCreatedBySqlScope(dataFilter, userId, userRole);
 
     // 仅查在库 + next_fee_deadline 在 [today, today+days] 区间
     const sql = `
@@ -699,11 +731,12 @@ class InventoryService {
         AND next_fee_deadline IS NOT NULL
         AND next_fee_deadline >= CURDATE()
         AND next_fee_deadline <= DATE_ADD(CURDATE(), INTERVAL :days DAY)
+        ${scope.clause}
       ORDER BY next_fee_deadline ASC
     `;
 
     const rows = await sequelize.query(sql, {
-      replacements: { days },
+      replacements: { days, ...scope.replacements },
       type: QueryTypes.SELECT
     });
 
@@ -735,13 +768,11 @@ class InventoryService {
    * @param {number} userId
    * @param {string} userRole
    */
-  async markAsSold(id, saleData, userId, userRole) {
-    const inv = await PatentInventory.findByPk(id);
+  async markAsSold(id, saleData, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
-
-    if (userRole === 'agent' && inv.created_by !== userId) {
-      throw new ValidationError('无权操作该库存记录');
-    }
 
     if (inv.status !== 'in_stock' && inv.status !== 'transferring') {
       throw new ValidationError(`当前状态为"${inv.status}"，不允许标记已售`);
@@ -796,12 +827,10 @@ class InventoryService {
    * 撤销已售（恢复为在库）
    * 仅 admin / process 可操作
    */
-  async unsell(id, userId, userRole) {
-    if (userRole === 'agent') {
-      throw new ValidationError('业务员无权撤销已售状态');
-    }
-
-    const inv = await PatentInventory.findByPk(id);
+  async unsell(id, userId, userRole, dataFilter) {
+    const inv = await PatentInventory.findOne({
+      where: { id, ...normalizeCreatedByFilter(dataFilter, userId, userRole) }
+    });
     if (!inv) throw new NotFoundError('库存记录不存在');
 
     if (inv.status !== 'sold') {
@@ -826,13 +855,12 @@ class InventoryService {
   /**
    * 已售归档列表（分页 + 筛选）
    */
-  async getSoldList(query, userId, userRole) {
+  async getSoldList(query, userId, userRole, dataFilter) {
     const { page, limit, offset } = parsePagination(query);
-    const where = { status: 'sold' };
-
-    if (userRole === 'agent') {
-      where.created_by = userId;
-    }
+    const where = {
+      status: 'sold',
+      ...normalizeCreatedByFilter(dataFilter, userId, userRole)
+    };
 
     // 筛选条件
     if (query.keyword) {
@@ -911,13 +939,8 @@ class InventoryService {
   /**
    * 已售统计摘要（卡片数据）
    */
-  async getSoldStats(userId, userRole) {
-    let userFilter = '';
-    const replacements = {};
-    if (userRole === 'agent') {
-      userFilter = 'AND created_by = :userId';
-      replacements.userId = userId;
-    }
+  async getSoldStats(userId, userRole, dataFilter) {
+    const scope = buildCreatedBySqlScope(dataFilter, userId, userRole);
 
     const [stats] = await sequelize.query(
       `SELECT
@@ -930,8 +953,8 @@ class InventoryService {
          COUNT(CASE WHEN sold_time >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN 1 END) AS month_sold,
          COALESCE(SUM(CASE WHEN sold_time >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN sold_price ELSE 0 END), 0) AS month_revenue
        FROM patent_inventory
-       WHERE status = 'sold' ${userFilter}`,
-      { replacements, type: QueryTypes.SELECT }
+       WHERE status = 'sold' ${scope.clause}`,
+      { replacements: scope.replacements, type: QueryTypes.SELECT }
     );
 
     return {
@@ -955,14 +978,10 @@ class InventoryService {
    * @param {Object} query
    * @param {string} [query.period='month'] - 统计周期 month/quarter/year
    */
-  async getSoldAnalytics(query, userId, userRole) {
-    const period = query.period || 'month';
-    let userFilter = '';
-    const replacements = {};
-    if (userRole === 'agent') {
-      userFilter = 'AND created_by = :userId';
-      replacements.userId = userId;
-    }
+  async getSoldAnalytics(query, userId, userRole, dataFilter) {
+    const scope = buildCreatedBySqlScope(dataFilter, userId, userRole);
+    const userFilter = scope.clause;
+    const replacements = scope.replacements;
 
     // 1. 月度趋势（近12个月）
     const trendSql = `
@@ -1225,3 +1244,6 @@ class InventoryService {
 }
 
 module.exports = new InventoryService();
+// 仅导出纯 scope helper，供权限边界单测复用；业务调用仍使用上面的 service 单例。
+module.exports.normalizeCreatedByFilter = normalizeCreatedByFilter;
+module.exports.buildCreatedBySqlScope = buildCreatedBySqlScope;

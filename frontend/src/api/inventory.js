@@ -2,8 +2,7 @@
  * 专利库存管理接口封装
  *
  * 后端前缀：/api/v1/inventory
- * 权限：authenticate + requireErpAccess + attachDataFilter
- *       （agent 仅能看/改自己 created_by 的记录）
+ * 权限：按 erp.inventory.* 权限编码校验，并按 grant 的 self/team/all scope 过滤数据。
  */
 import request from './request'
 
@@ -40,7 +39,7 @@ export function deleteInventory(id) {
 }
 
 /**
- * 批量删除（仅管理员）
+ * 批量删除（erp.inventory.batch_delete）
  * @param {number[]} ids - 要删除的库存 ID 数组
  */
 export function batchDeleteInventory(ids) {
@@ -133,7 +132,7 @@ export function resolveAnomaly(id, note) {
   return request.put(`/inventory/anomalies/${id}/resolve`, { note })
 }
 
-/** 手动触发批量扫描（仅管理员） */
+/** 手动触发批量扫描（erp.inventory_anomaly.scan） */
 export function triggerAnomalyScan() {
   return request.post('/inventory/anomalies/scan')
 }

@@ -14,16 +14,61 @@
  *   - broadcast 给一组用户批量创建（广播 admin/合同负责人等）
  *
  * 【权限】
- *   用户只能看/改自己的消息 + NULL 广播消息（admin）
+ *   self 只能看自己的消息；all 可额外读取 user_id=NULL 的系统广播。
+ *   系统广播是共享只读记录，任何用户都不能标记已读或删除。
+ *   主项目角色不在这里解释，userRole 仅用于旧会话兼容。
  * ============================================================
  */
 
 const { Op, QueryTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 const Notification = require('../models/Notification');
-const { NotFoundError, ValidationError } = require('../utils/errors');
+const { NotFoundError, ValidationError, ForbiddenError } = require('../utils/errors');
 const { parsePagination } = require('../utils/pagination');
 const logger = require('../utils/logger');
+
+const DENY_NOTIFICATION_FILTER = Object.freeze({ user_id: -1 });
+
+function normalizeNotificationFilter(dataFilter, userId, userRole) {
+  if (dataFilter && typeof dataFilter === 'object' && !Array.isArray(dataFilter)) {
+    const keys = Reflect.ownKeys(dataFilter);
+    if (keys.length === 0) {
+      return { [Op.or]: [{ user_id: userId }, { user_id: null }] };
+    }
+    if (keys.length === 1 && keys[0] === 'user_id') {
+      const scopedUserId = Number(dataFilter.user_id);
+      return Number.isInteger(scopedUserId) && scopedUserId > 0
+        ? { user_id: scopedUserId }
+        : { ...DENY_NOTIFICATION_FILTER };
+    }
+    return { ...DENY_NOTIFICATION_FILTER };
+  }
+
+  if (userRole === 'admin') {
+    return { [Op.or]: [{ user_id: userId }, { user_id: null }] };
+  }
+  if (userRole === 'process' || userRole === 'agent') return { user_id: userId };
+  return { ...DENY_NOTIFICATION_FILTER };
+}
+
+function normalizeNotificationWriteFilter(dataFilter, userId, userRole) {
+  const readFilter = normalizeNotificationFilter(dataFilter, userId, userRole);
+  const keys = Reflect.ownKeys(readFilter);
+
+  if (keys.length === 1 && keys[0] === 'user_id' && readFilter.user_id === userId) {
+    return { user_id: userId };
+  }
+  if (keys.length === 1 && keys[0] === Op.or) {
+    return { user_id: userId };
+  }
+  return { ...DENY_NOTIFICATION_FILTER };
+}
+
+function assertWritableNotification(notification) {
+  if (notification?.user_id === null || notification?.user_id === undefined) {
+    throw new ForbiddenError('系统广播为共享只读消息，不能修改或删除');
+  }
+}
 
 class NotificationService {
   /**
@@ -31,20 +76,13 @@ class NotificationService {
    *
    * 返回：
    *   - user_id === userId 的消息
-   *   - 或 user_id IS NULL（广播给 admin）且当前角色是 admin
+   *   - all scope 时额外包含 user_id IS NULL 的系统广播
    */
-  async getList(query, userId, userRole) {
+  async getList(query, userId, userRole, dataFilter) {
     const { page, limit, offset } = parsePagination(query);
     const { type, is_read, level } = query;
 
-    const where = {};
-    // 用户可见范围
-    const isAdmin = userRole === 'admin';
-    if (isAdmin) {
-      where[Op.or] = [{ user_id: userId }, { user_id: null }];
-    } else {
-      where.user_id = userId;
-    }
+    const where = normalizeNotificationFilter(dataFilter, userId, userRole);
 
     if (type) where.type = type;
     if (is_read !== undefined && is_read !== '') {
@@ -59,8 +97,16 @@ class NotificationService {
       limit
     });
 
+    const list = data.rows.map((row) => {
+      const item = typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
+      if (item.user_id === null || item.user_id === undefined) {
+        return { ...item, is_read: 1, read_time: null, readonly: true };
+      }
+      return { ...item, readonly: false };
+    });
+
     return {
-      list: data.rows,
+      list,
       pagination: {
         page,
         limit,
@@ -73,30 +119,23 @@ class NotificationService {
   /**
    * 未读消息数（用于顶栏红点）
    */
-  async getUnreadCount(userId, userRole) {
-    const where = { is_read: 0 };
-    if (userRole === 'admin') {
-      where[Op.or] = [{ user_id: userId }, { user_id: null }];
-    } else {
-      where.user_id = userId;
-    }
+  async getUnreadCount(userId, userRole, dataFilter) {
+    const where = {
+      ...normalizeNotificationWriteFilter(dataFilter, userId, userRole),
+      is_read: 0
+    };
     return await Notification.count({ where });
   }
 
   /**
    * 标记单条已读
    */
-  async markRead(id, userId, userRole) {
-    const n = await Notification.findByPk(id);
+  async markRead(id, userId, userRole, dataFilter) {
+    const n = await Notification.findOne({
+      where: { id, ...normalizeNotificationWriteFilter(dataFilter, userId, userRole) }
+    });
     if (!n) throw new NotFoundError('消息不存在');
-
-    // 权限检查：非 admin 只能改自己的
-    if (userRole !== 'admin' && n.user_id !== userId) {
-      throw new ValidationError('无权操作该消息');
-    }
-    if (n.user_id === null && userRole !== 'admin') {
-      throw new ValidationError('广播消息仅 admin 可操作');
-    }
+    assertWritableNotification(n);
 
     if (!n.is_read) {
       await n.update({ is_read: 1, read_time: new Date() });
@@ -107,13 +146,11 @@ class NotificationService {
   /**
    * 批量已读（当前用户所有未读）
    */
-  async markAllRead(userId, userRole) {
-    const where = { is_read: 0 };
-    if (userRole === 'admin') {
-      where[Op.or] = [{ user_id: userId }, { user_id: null }];
-    } else {
-      where.user_id = userId;
-    }
+  async markAllRead(userId, userRole, dataFilter) {
+    const where = {
+      ...normalizeNotificationWriteFilter(dataFilter, userId, userRole),
+      is_read: 0
+    };
     const [affected] = await Notification.update(
       { is_read: 1, read_time: new Date() },
       { where }
@@ -124,13 +161,12 @@ class NotificationService {
   /**
    * 删除消息
    */
-  async remove(id, userId, userRole) {
-    const n = await Notification.findByPk(id);
+  async remove(id, userId, userRole, dataFilter) {
+    const n = await Notification.findOne({
+      where: { id, ...normalizeNotificationWriteFilter(dataFilter, userId, userRole) }
+    });
     if (!n) throw new NotFoundError('消息不存在');
-
-    if (userRole !== 'admin' && n.user_id !== userId) {
-      throw new ValidationError('无权删除该消息');
-    }
+    assertWritableNotification(n);
     await n.destroy();
     return { id };
   }
@@ -229,3 +265,6 @@ class NotificationService {
 }
 
 module.exports = new NotificationService();
+module.exports.normalizeNotificationFilter = normalizeNotificationFilter;
+module.exports.normalizeNotificationWriteFilter = normalizeNotificationWriteFilter;
+module.exports.assertWritableNotification = assertWritableNotification;
