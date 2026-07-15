@@ -24,7 +24,7 @@ describe('数据库备份 COS 上传与 HEAD 校验', () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'erp-backup-cos-test-'));
     backupFile = path.join(tempDir, 'erp_db_20260711_120000.sql.gz');
-    fs.writeFileSync(backupFile, Buffer.from('gzip-fixture'));
+    fs.writeFileSync(backupFile, Buffer.from('gzip-fixture'), { mode: 0o600 });
     fileSize = fs.statSync(backupFile).size;
   });
 
