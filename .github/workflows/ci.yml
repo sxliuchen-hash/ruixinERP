@@ -97,6 +97,21 @@ jobs:
           npm run migrate:system-settings
           npm run migrate:system-settings
 
+      - name: Verify employee user binding migration is idempotent
+        run: |
+          npm run migrate:employee-user-id-unique
+          npm run migrate:employee-user-id-unique
+
+      - name: Verify WeChat approval number migration is idempotent
+        run: |
+          npm run migrate:wechat-sp-no-unique
+          npm run migrate:wechat-sp-no-unique
+
+      - name: Verify confirmed performance period migration is idempotent
+        run: |
+          npm run migrate:performance-confirmed-period-unique
+          npm run migrate:performance-confirmed-period-unique
+
       - name: Run database integration tests
         env:
           ALLOW_TEST_DB_INIT: "NO"

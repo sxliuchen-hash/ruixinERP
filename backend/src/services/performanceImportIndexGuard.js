@@ -12,7 +12,10 @@ function normalizeGenerationExpression(expression) {
   return String(expression || '')
     .toLowerCase()
     .replace(/_utf8mb4/g, '')
-    .replace(/[`'\s()]/g, '');
+    // mysql2 在 MySQL 8.0 上可能把 information_schema 中的字符串字面量
+    // 返回为 \'confirmed\' / \'-\' / \'0\'；这些反斜杠只是元数据转义，
+    // 不改变生成表达式语义。规范化后再做固定语义校验。
+    .replace(/[`'\\\s()]/g, '');
 }
 
 function isExpectedGeneratedColumn(rows) {

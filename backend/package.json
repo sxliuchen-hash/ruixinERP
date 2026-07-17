@@ -14,6 +14,7 @@
     "migrate:system-settings": "node scripts/run-system-settings-migration.js",
     "preflight:unified-auth": "node scripts/run-unified-auth-preflight.js",
     "precheck:release": "node scripts/run-release-precheck.js",
+    "generate:inbound-credentials": "node scripts/generate-inbound-client-credentials.js",
     "wait:ready": "node scripts/wait-for-ready.js",
     "smoke:main-contract": "node scripts/run-main-project-contract-smoke.js",
     "smoke:cos-roundtrip": "node scripts/run-cos-roundtrip-smoke.js",
@@ -23,7 +24,7 @@
     "test:ci": "jest --ci --runInBand --detectOpenHandles --forceExit=false",
     "test:integration:ci": "jest --ci --runInBand --detectOpenHandles --forceExit=false tests/integration",
     "test:frontend-auth-static": "jest --ci --runInBand --forceExit=false tests/frontendAuthFlowStaticAudit.test.js tests/frontendNavigationCoverage.test.js tests/frontendRoleAuthorizationStaticAudit.test.js tests/ssoStateFrontendAudit.test.js tests/authFeatures.test.js tests/authCompatibility.test.js tests/permissionManifestAndStaticAudit.test.js",
-    "test:delivery-safety": "jest --ci --runInBand --forceExit=false tests/databaseDeploymentContract.test.js tests/deploymentNginxStaticAudit.test.js tests/documentationAuthGovernance.test.js tests/backupScriptSafety.test.js tests/backupCosUpload.test.js tests/dbRestoreSmokeSafety.test.js tests/payrollSchemaMigration.test.js tests/systemSettingsMigration.test.js tests/releaseToolingSafety.test.js tests/releasePrecheck.test.js tests/waitForReady.test.js"
+    "test:delivery-safety": "jest --ci --runInBand --forceExit=false tests/databaseDeploymentContract.test.js tests/deploymentNginxStaticAudit.test.js tests/documentationAuthGovernance.test.js tests/backupScriptSafety.test.js tests/backupCosUpload.test.js tests/dbRestoreSmokeSafety.test.js tests/payrollSchemaMigration.test.js tests/systemSettingsMigration.test.js tests/inboundClientCredentialGenerator.test.js tests/releaseToolingSafety.test.js tests/releasePrecheck.test.js tests/waitForReady.test.js"
   },
   "keywords": [],
   "author": "",

@@ -132,6 +132,22 @@ describe('业绩已确认年月数据库级唯一约束', () => {
       .rejects.toThrow('migrate:performance-confirmed-period-unique');
   });
 
+  test('接受 MySQL 8.0/mysql2 返回的反斜杠转义字符串字面量', async () => {
+    const escaped = {
+      ...validGeneratedColumnRow(),
+      GENERATION_EXPRESSION:
+        "(case when (`status` = _utf8mb4\\'confirmed\\') then " +
+        "concat(`year`,_utf8mb4\\'-\\',lpad(`month`,2,_utf8mb4\\'0\\')) else NULL end)"
+    };
+    const mysql80 = {
+      query: jest.fn()
+        .mockResolvedValueOnce([[escaped], {}])
+        .mockResolvedValueOnce([[validIndexRow()], {}])
+    };
+
+    await expect(assertPerformanceImportConfirmedPeriodUniqueIndex(mysql80)).resolves.toBe(true);
+  });
+
   test('并发唯一冲突被服务映射为可识别的业务校验错误', async () => {
     jest.spyOn(PerformanceImport, 'findOne').mockResolvedValue(null);
     jest.spyOn(sequelize, 'transaction').mockRejectedValue(Object.assign(
